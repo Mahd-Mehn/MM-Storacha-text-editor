@@ -267,5 +267,41 @@ export interface LocalStorageManagerInterface {
   destroy(): void
 }
 
+/**
+ * Hybrid Storage Service Interface
+ * Defines the contract for hybrid storage operations combining remote and local storage
+ * Requirements: 3.1, 3.5 - Local storage fallback and sync mechanism
+ */
+export interface HybridStorageServiceInterface {
+  initialize(): Promise<void>
+  storeNote(noteData: StoredNoteData): Promise<{ cid?: string; local: boolean }>
+  retrieveNote(noteId: string, cid?: string): Promise<StoredNoteData | null>
+  listNotes(): Promise<{ noteId: string; synced: boolean; storedAt: Date }[]>
+  deleteNote(noteId: string): Promise<void>
+  syncUnsyncedNotes(): Promise<{ synced: number; failed: number }>
+  getStorageStats(): Promise<{ localSize: number; totalNotes: number; syncedNotes: number; unsyncedNotes: number }>
+  clearAllStorage(): Promise<void>
+}
+
+/**
+ * NoteManager Service Interface
+ * Defines the contract for note management operations
+ * Requirements: 5.3, 5.5 - Note creation, listing, and search capabilities
+ */
+export interface NoteManagerInterface {
+  initialize(): Promise<void>
+  createNote(title?: string): Promise<Note>
+  loadNote(id: string): Promise<Note | null>
+  saveNote(note: Note): Promise<void>
+  deleteNote(id: string): Promise<void>
+  listNotes(): Promise<Note[]>
+  searchNotes(query: string): Promise<Note[]>
+  getNoteMetadata(id: string): Promise<NoteMetadata | null>
+  updateNoteTitle(id: string, title: string): Promise<void>
+  duplicateNote(id: string, newTitle?: string): Promise<Note>
+  getRecentNotes(limit?: number): Promise<Note[]>
+  isNoteExists(id: string): Promise<boolean>
+}
+
 // Export auth types
 export * from './auth.js'

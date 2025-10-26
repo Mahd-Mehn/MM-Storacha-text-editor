@@ -30,3 +30,6 @@ export { LocalStorageManager, localStorageManager } from './local-storage';
 
 // Hybrid storage service
 export { HybridStorageService, hybridStorageService } from './hybrid-storage';
+
+// Note management service
+export { NoteManager, noteManager } from './note-manager';
