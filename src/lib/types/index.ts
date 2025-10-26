@@ -86,3 +86,6 @@ export interface StoredNoteData {
   /** Complete version history for the note */
   versionHistory: VersionEntry[];
 }
+
+// Export auth types
+export * from './auth.js'
