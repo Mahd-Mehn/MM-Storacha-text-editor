@@ -27,3 +27,22 @@ export {
   initializeConnectivityStore,
   refreshConnectionStatus
 } from './connectivity';
+
+// Offline synchronization stores
+export {
+  queuedOperations,
+  isSyncing,
+  queueSize,
+  hasPendingOperations,
+  highPriorityOperationsCount,
+  failedOperationsCount,
+  syncStatusMessage,
+  lastSyncTime,
+  initializeSyncStore,
+  queueSaveOperation,
+  queueDeleteOperation,
+  queueShareOperation,
+  queueVersionOperation,
+  triggerSync,
+  clearSyncQueue
+} from './sync';

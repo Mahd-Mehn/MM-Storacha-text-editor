@@ -164,5 +164,108 @@ export interface OfflineDetectionServiceInterface {
   destroy(): void
 }
 
+/**
+ * Queued operation types for offline synchronization
+ */
+export type QueuedOperationType = 'save' | 'delete' | 'share' | 'version';
+
+/**
+ * Priority levels for queued operations
+ */
+export type QueuePriority = 'low' | 'normal' | 'high' | 'critical';
+
+/**
+ * Queued operation for offline synchronization
+ * Requirements: 3.1, 3.2, 3.3, 3.5 - Offline editing and sync
+ */
+export interface QueuedOperation {
+  /** Unique identifier for the operation */
+  id: string;
+  /** Type of operation to perform */
+  type: QueuedOperationType;
+  /** Priority level for processing order */
+  priority: QueuePriority;
+  /** Note ID this operation relates to */
+  noteId: string;
+  /** Operation payload data */
+  payload: any;
+  /** Timestamp when operation was queued */
+  timestamp: Date;
+  /** Number of retry attempts */
+  retryCount: number;
+  /** Maximum number of retries allowed */
+  maxRetries: number;
+  /** Next retry timestamp (for exponential backoff) */
+  nextRetry?: Date;
+}
+
+/**
+ * Sync operation result
+ */
+export interface SyncResult {
+  /** Whether the operation succeeded */
+  success: boolean;
+  /** Operation that was processed */
+  operation: QueuedOperation;
+  /** Error message if operation failed */
+  error?: string;
+  /** Result data if operation succeeded */
+  result?: any;
+}
+
+/**
+ * Offline Sync Manager Interface
+ * Defines the contract for offline queue and synchronization management
+ * Requirements: 3.1, 3.2, 3.3, 3.5 - Offline editing, sync, and conflict resolution
+ */
+export interface OfflineSyncManagerInterface {
+  initialize(): Promise<void>
+  queueOperation(operation: Omit<QueuedOperation, 'id' | 'timestamp' | 'retryCount'>): void
+  processQueue(): Promise<SyncResult[]>
+  getQueuedOperations(): QueuedOperation[]
+  getQueueSize(): number
+  clearQueue(): void
+  isProcessing(): boolean
+  onSyncComplete(callback: (results: SyncResult[]) => void): () => void
+  destroy(): void
+}
+
+/**
+ * Local storage entry for note data
+ * Requirements: 3.1, 3.5 - Local storage fallback
+ */
+export interface LocalStorageEntry {
+  /** Note ID */
+  noteId: string;
+  /** Stored note data */
+  data: StoredNoteData;
+  /** Timestamp when stored locally */
+  storedAt: Date;
+  /** Whether this entry has been synced to remote storage */
+  synced: boolean;
+  /** Last sync attempt timestamp */
+  lastSyncAttempt?: Date;
+  /** Number of sync attempts */
+  syncAttempts: number;
+}
+
+/**
+ * Local Storage Manager Interface
+ * Defines the contract for IndexedDB-based local storage fallback
+ * Requirements: 3.1, 3.5 - Local storage fallback and sync mechanism
+ */
+export interface LocalStorageManagerInterface {
+  initialize(): Promise<void>
+  storeNote(noteData: StoredNoteData): Promise<void>
+  retrieveNote(noteId: string): Promise<StoredNoteData | null>
+  listNotes(): Promise<LocalStorageEntry[]>
+  deleteNote(noteId: string): Promise<void>
+  markAsSynced(noteId: string): Promise<void>
+  getUnsyncedNotes(): Promise<LocalStorageEntry[]>
+  clearStorage(): Promise<void>
+  getStorageSize(): Promise<number>
+  destroy(): void
+}
+
 // Export auth types
 export * from './auth.js'
