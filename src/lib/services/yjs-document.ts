@@ -2,7 +2,7 @@
 // Provides wrapper for rich text content with serialization/deserialization
 // Requirements: 3.1 - Offline editing, 3.3 - Conflict resolution, 6.4 - Version history
 
-import { Doc as YDoc, Text as YText, applyUpdate, encodeStateAsUpdate, encodeStateVector } from 'yjs';
+import { Doc as YDoc, applyUpdate, encodeStateAsUpdate, encodeStateVector } from 'yjs';
 import type { Note, StoredNoteData } from '../types';
 
 /**

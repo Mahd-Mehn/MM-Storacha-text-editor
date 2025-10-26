@@ -12,3 +12,7 @@ export * from './utils/index.js';
 
 // Re-export stores
 export * from './stores/index.js';
+
+// Re-export components
+export { default as RichTextEditor } from './components/RichTextEditor.svelte';
+export { default as EditorToolbar } from './components/EditorToolbar.svelte';
