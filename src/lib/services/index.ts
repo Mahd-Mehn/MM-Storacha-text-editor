@@ -21,3 +21,12 @@ export { VersionHistoryService, versionHistoryService } from './version-history'
 
 // Offline detection and connectivity monitoring
 export { OfflineDetectionService, offlineDetectionService } from './offline-detection';
+
+// Offline synchronization management
+export { OfflineSyncManager, offlineSyncManager } from './offline-sync';
+
+// Local storage management
+export { LocalStorageManager, localStorageManager } from './local-storage';
+
+// Hybrid storage service
+export { HybridStorageService, hybridStorageService } from './hybrid-storage';
