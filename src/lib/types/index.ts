@@ -132,5 +132,37 @@ export interface VersionHistoryServiceInterface {
   deleteVersionHistory(noteId: string): Promise<void>
 }
 
+/**
+ * Connection status for offline/online detection
+ * Requirements: 3.4, 3.5 - Connection status and offline handling
+ */
+export type ConnectionStatus = 'online' | 'offline' | 'connecting' | 'unknown';
+
+/**
+ * Network connectivity event data
+ */
+export interface ConnectivityEvent {
+  /** Current connection status */
+  status: ConnectionStatus;
+  /** Timestamp when the status changed */
+  timestamp: Date;
+  /** Optional additional context about the connectivity change */
+  context?: string;
+}
+
+/**
+ * Offline Detection Service Interface
+ * Defines the contract for network connectivity monitoring
+ * Requirements: 3.4, 3.5 - Connection monitoring and status management
+ */
+export interface OfflineDetectionServiceInterface {
+  initialize(): void
+  getConnectionStatus(): ConnectionStatus
+  isOnline(): boolean
+  isOffline(): boolean
+  onStatusChange(callback: (event: ConnectivityEvent) => void): () => void
+  destroy(): void
+}
+
 // Export auth types
 export * from './auth.js'
