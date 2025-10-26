@@ -87,5 +87,50 @@ export interface StoredNoteData {
   versionHistory: VersionEntry[];
 }
 
+/**
+ * Storacha Client Service Interface
+ * Defines the contract for Storacha network operations
+ * Requirements: 2.1, 2.4 - Content upload/retrieval and space management
+ */
+export interface StorachaClientInterface {
+  initialize(): Promise<void>
+  uploadContent(content: Uint8Array): Promise<string>
+  retrieveContent(cid: string): Promise<Uint8Array>
+  uploadNoteData(noteData: StoredNoteData): Promise<string>
+  retrieveNoteData(cid: string): Promise<StoredNoteData>
+  createSpace(name?: string): Promise<string>
+  shareSpace(spaceId: string, permissions: string[]): Promise<string>
+  getCurrentSpaceDID(): string | null
+  isReady(): boolean
+}
+
+/**
+ * Auto-save Service Interface
+ * Defines the contract for automatic note saving functionality
+ * Requirements: 2.1, 2.2 - Auto-save with debouncing and retry logic
+ */
+export interface AutoSaveServiceInterface {
+  initialize(): Promise<void>
+  scheduleAutoSave(note: Note, priority?: 'normal' | 'high'): void
+  forceSave(note: Note): Promise<void>
+  hasPendingSave(noteId: string): boolean
+  clearSaveQueue(): void
+}
+
+/**
+ * Version History Service Interface
+ * Defines the contract for version tracking and retrieval functionality
+ * Requirements: 6.1, 6.4 - Version history with timestamps and retrieval
+ */
+export interface VersionHistoryServiceInterface {
+  initialize(): Promise<void>
+  createVersion(noteId: string, yjsUpdate: Uint8Array, changeDescription?: string): Promise<VersionEntry>
+  getVersionHistory(noteId: string): Promise<VersionEntry[]>
+  getVersion(noteId: string, versionNumber: number): Promise<StoredNoteData | null>
+  getLatestVersion(noteId: string): Promise<StoredNoteData | null>
+  restoreVersion(noteId: string, versionNumber: number): Promise<Note | null>
+  deleteVersionHistory(noteId: string): Promise<void>
+}
+
 // Export auth types
 export * from './auth.js'
