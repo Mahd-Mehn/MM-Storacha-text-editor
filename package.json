@@ -1,0 +1,37 @@
+{
+	"name": "storacha-notes",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^6.1.0",
+		"@sveltejs/kit": "^2.43.2",
+		"@sveltejs/vite-plugin-svelte": "^6.2.0",
+		"@types/node": "^24.9.1",
+		"svelte": "^5.39.5",
+		"svelte-check": "^4.3.2",
+		"typescript": "^5.9.2",
+		"vite": "^7.1.7"
+	},
+	"dependencies": {
+		"@storacha/client": "^1.8.4",
+		"@tiptap/core": "^3.8.0",
+		"@tiptap/extension-collaboration": "^3.8.0",
+		"@tiptap/extension-collaboration-cursor": "^2.26.2",
+		"@tiptap/extension-typography": "^3.8.0",
+		"@tiptap/starter-kit": "^3.8.0",
+		"@ucanto/client": "^9.0.2",
+		"@ucanto/principal": "^9.0.3",
+		"@web3-storage/w3up-client": "^17.3.0",
+		"y-websocket": "^3.0.0",
+		"yjs": "^13.6.27"
+	}
+}

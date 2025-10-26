@@ -1,38 +1,62 @@
-# sv
+# Storacha Notes
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A privacy-first, offline-capable note-taking application built with Svelte, Tiptap, and decentralized storage via Storacha.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **Rich Text Editing**: Powered by Tiptap with formatting options (headings, bold, italic, lists)
+- **Decentralized Storage**: Notes stored on Storacha network for privacy and data ownership
+- **Offline Capability**: Continue editing offline with automatic sync when reconnected
+- **No Account Required**: Uses UCAN authentication for decentralized identity
+- **Version History**: Track and restore previous versions of your notes
+- **Secure Sharing**: Share notes with read-only or editable permissions
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Development
 
-# create a new project in my-app
-npx sv create my-app
+Install dependencies:
+
+```bash
+bun install
 ```
 
-## Developing
+Start the development server:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```bash
+bun run dev
 ```
 
 ## Building
 
-To create a production version of your app:
+To create a production version:
 
-```sh
-npm run build
+```bash
+bun run build
 ```
 
-You can preview the production build with `npm run preview`.
+Preview the production build:
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+```bash
+bun run preview
+```
+
+## Architecture
+
+- **Frontend**: Svelte with TypeScript
+- **Rich Text Editor**: Tiptap with Yjs for collaborative editing
+- **Storage**: Storacha decentralized network
+- **Authentication**: UCAN/w3up for decentralized identity
+- **Offline Sync**: Yjs CRDTs for conflict-free synchronization
+
+## Project Structure
+
+```
+src/
+├── lib/
+│   ├── components/     # Reusable Svelte components
+│   ├── services/       # Business logic and managers
+│   ├── stores/         # Svelte stores for state management
+│   ├── types/          # TypeScript type definitions
+│   └── utils/          # Utility functions and helpers
+├── routes/             # SvelteKit routes
+└── app.html           # HTML template
+```
