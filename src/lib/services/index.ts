@@ -9,3 +9,12 @@ export { UCANAuthService, authService } from './auth';
 
 // Storacha space management
 export { StorachaSpaceService, spaceService } from './space';
+
+// Storacha storage integration
+export { StorachaClient, storachaClient } from './storacha';
+
+// Auto-save functionality
+export { AutoSaveService, autoSaveService } from './autosave';
+
+// Version history management
+export { VersionHistoryService, versionHistoryService } from './version-history';
