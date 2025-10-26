@@ -15,3 +15,15 @@ export {
   setCurrentSpace, 
   clearSpaces 
 } from './space';
+
+// Connectivity monitoring stores
+export {
+  connectionStatus,
+  lastConnectivityEvent,
+  isOnline,
+  isOffline,
+  isConnecting,
+  connectionStatusMessage,
+  initializeConnectivityStore,
+  refreshConnectionStatus
+} from './connectivity';

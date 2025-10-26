@@ -18,3 +18,6 @@ export { AutoSaveService, autoSaveService } from './autosave';
 
 // Version history management
 export { VersionHistoryService, versionHistoryService } from './version-history';
+
+// Offline detection and connectivity monitoring
+export { OfflineDetectionService, offlineDetectionService } from './offline-detection';
