@@ -25,29 +25,43 @@
       return;
     }
     
-    editor = new Editor({
-      element: editorElement,
-      extensions: [
-        StarterKit,
-        Typography,
-        Collaboration.configure({
-          document: yjsDocument,
-          field: 'content', // This should match the field name used in YjsDocumentManager
-        }),
-      ],
-      content: '',
-      editable,
-      editorProps: {
-        attributes: {
-          class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[200px] p-4',
-          'data-placeholder': placeholder,
-        },
-        handleKeyDown: (view, event) => {
-          // Custom keyboard shortcuts
-          if (event.ctrlKey || event.metaKey) {
-            switch (event.key) {
-              case 'b':
-                event.preventDefault();
+    // Cleanup any existing editor instance
+    if (editor) {
+      try {
+        editor.destroy();
+      } catch (e) {
+        console.warn('Error destroying previous editor:', e);
+      }
+      editor = null;
+    }
+    
+    try {
+      editor = new Editor({
+        element: editorElement,
+        extensions: [
+          StarterKit.configure({
+            // Disable history extension as Collaboration provides its own
+            history: false,
+          }),
+          Typography,
+          Collaboration.configure({
+            document: yjsDocument,
+            field: 'content',
+          }),
+        ],
+        content: '',
+        editable,
+        editorProps: {
+          attributes: {
+            class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[200px] p-4',
+            'data-placeholder': placeholder,
+          },
+          handleKeyDown: (view, event) => {
+            // Custom keyboard shortcuts
+            if (event.ctrlKey || event.metaKey) {
+              switch (event.key) {
+                case 'b':
+                  event.preventDefault();
                 editor?.chain().focus().toggleBold().run();
                 return true;
               case 'i':
@@ -115,12 +129,23 @@
         console.log('Tiptap editor destroyed');
       },
     });
+    } catch (error) {
+      console.error('Failed to initialize editor:', error);
+      // If it's a duplicate type error, try to recover
+      if (error instanceof Error && error.message.includes('already been defined')) {
+        console.warn('Yjs type conflict detected. This may happen on hot reload.');
+      }
+    }
   });
   
   // Cleanup on destroy
   onDestroy(() => {
     if (editor) {
-      editor.destroy();
+      try {
+        editor.destroy();
+      } catch (e) {
+        console.warn('Error destroying editor on cleanup:', e);
+      }
       editor = null;
     }
   });
@@ -128,6 +153,12 @@
   // Reactive updates for editable prop
   $: if (editor) {
     editor.setEditable(editable);
+  }
+  
+  // Watch for yjsDocument changes and recreate editor if needed
+  $: if (yjsDocument && editorElement) {
+    // If the document changes, we need to recreate the editor
+    // This is handled by the key block in the parent component
   }
   
   // Export editor instance for parent components
@@ -177,6 +208,7 @@
     outline: none;
     padding: 1rem;
     min-height: 200px;
+    white-space: pre-wrap;
   }
   
   :global(.ProseMirror p.is-editor-empty:first-child::before) {

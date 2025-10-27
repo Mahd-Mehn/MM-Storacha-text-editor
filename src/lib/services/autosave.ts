@@ -1,5 +1,5 @@
 import type { Note, StoredNoteData } from '../types/index.js'
-import { storachaClient } from './storacha.js'
+import { hybridStorageService } from './hybrid-storage.js'
 import * as Y from 'yjs'
 
 /**
@@ -29,11 +29,11 @@ export class AutoSaveService {
 
   /**
    * Initialize the auto-save service
-   * Ensures Storacha client is ready for operations
+   * Ensures hybrid storage is ready for operations
    */
   async initialize(): Promise<void> {
     try {
-      await storachaClient.initialize()
+      await hybridStorageService.initialize()
     } catch (error) {
       console.error('Failed to initialize auto-save service:', error)
       throw new Error('Failed to initialize auto-save service')
@@ -143,14 +143,10 @@ export class AutoSaveService {
   }
 
   /**
-   * Perform the actual save operation to Storacha
+   * Perform the actual save operation using hybrid storage
    * Requirements: 2.2 - Store each save as new version
    */
   private async performSave(note: Note): Promise<void> {
-    if (!storachaClient.isReady()) {
-      throw new Error('Storacha client not ready for save operation')
-    }
-
     try {
       // Serialize Yjs document to binary format
       const yjsUpdate = Y.encodeStateAsUpdate(note.content)
@@ -173,24 +169,27 @@ export class AutoSaveService {
         versionHistory: [{
           version: newVersion,
           timestamp: new Date(),
-          storachaCID: '', // Will be filled after upload
+          storachaCID: '', // Will be filled after upload if successful
           changeDescription: newVersion === 1 ? 'Initial version' : `Auto-save version ${newVersion}`
         }]
       }
 
-      // Upload to Storacha
-      const cid = await storachaClient.uploadNoteData(storedNoteData)
+      // Use hybrid storage which handles fallback to local storage
+      const result = await hybridStorageService.storeNote(storedNoteData)
       
-      // Update the CID in metadata and version history
-      updatedMetadata.storachaCID = cid
-      if (storedNoteData.versionHistory.length > 0) {
-        storedNoteData.versionHistory[storedNoteData.versionHistory.length - 1].storachaCID = cid
+      // Update the CID in metadata if remote upload succeeded
+      if (result.cid) {
+        updatedMetadata.storachaCID = result.cid
+        if (storedNoteData.versionHistory.length > 0) {
+          storedNoteData.versionHistory[storedNoteData.versionHistory.length - 1].storachaCID = result.cid
+        }
+        console.log(`Note ${note.id} saved successfully with CID: ${result.cid}`)
+      } else {
+        console.log(`Note ${note.id} saved locally (will sync when online)`)
       }
 
-      // Update the note object (this will be handled by the calling service)
+      // Update the note object
       note.metadata = updatedMetadata
-      
-      console.log(`Note ${note.id} saved successfully with CID: ${cid}`)
     } catch (error) {
       console.error('Failed to perform save operation:', error)
       throw error

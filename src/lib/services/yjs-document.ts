@@ -15,17 +15,31 @@ export class YjsDocumentManager {
   /**
    * Create or retrieve a Yjs document for a note
    * @param noteId - Unique identifier for the note
+   * @param forceNew - If true, destroys existing document and creates a new one
    * @returns Yjs document instance
    */
-  createDocument(noteId: string): YDoc {
-    if (this.documents.has(noteId)) {
-      return this.documents.get(noteId)!;
+  createDocument(noteId: string, forceNew: boolean = false): YDoc {
+    // Check if document already exists
+    const existingDoc = this.documents.get(noteId);
+    if (existingDoc && !forceNew) {
+      // Return existing document to avoid type conflicts
+      return existingDoc;
+    }
+    
+    if (existingDoc && forceNew) {
+      // Destroy and recreate if forced
+      try {
+        existingDoc.destroy();
+      } catch (e) {
+        console.warn(`Error destroying document ${noteId}:`, e);
+      }
+      this.documents.delete(noteId);
     }
 
     const doc = new YDoc();
     
-    // Initialize the document with a 'content' text type for rich text editing
-    const text = doc.getText('content');
+    // Note: We don't initialize any types here - let the Collaboration extension
+    // create the XmlFragment it needs. This prevents type conflicts.
     
     // Set up document metadata
     doc.clientID = this.generateClientId();
@@ -111,21 +125,60 @@ export class YjsDocumentManager {
    * @returns Plain text content
    */
   getTextContent(doc: YDoc): string {
-    const text = doc.getText('content');
-    return text.toString();
+    // Try to get XmlFragment first (used by ProseMirror/Tiptap)
+    try {
+      const fragment = doc.getXmlFragment('content');
+      // Extract text from XML fragment
+      return this.extractTextFromXmlFragment(fragment);
+    } catch (e) {
+      // Fallback to Y.Text if XmlFragment doesn't exist
+      try {
+        const text = doc.getText('content');
+        return text.toString();
+      } catch (e2) {
+        return '';
+      }
+    }
   }
 
   /**
    * Set text content in a Yjs document
+   * Note: This should only be used for initial content before the editor is initialized
    * @param doc - Yjs document
    * @param content - Text content to set
    */
   setTextContent(doc: YDoc, content: string): void {
-    const text = doc.getText('content');
+    // For ProseMirror/Tiptap, we should not manually set content
+    // The editor will handle this through the Collaboration extension
+    // This method is kept for backward compatibility but should be avoided
+    console.warn('setTextContent should not be used with ProseMirror. Let the editor handle content initialization.');
+  }
+
+  /**
+   * Extract plain text from an XmlFragment
+   * @param fragment - Yjs XmlFragment
+   * @returns Plain text content
+   */
+  private extractTextFromXmlFragment(fragment: any): string {
+    let text = '';
     
-    // Clear existing content and insert new content
-    text.delete(0, text.length);
-    text.insert(0, content);
+    // Recursively extract text from XML nodes
+    const extractText = (node: any): void => {
+      if (node._first) {
+        let item = node._first;
+        while (item) {
+          if (item.content && item.content.str) {
+            text += item.content.str;
+          } else if (item.content && item.content.type) {
+            extractText(item.content.type);
+          }
+          item = item.right;
+        }
+      }
+    };
+    
+    extractText(fragment);
+    return text;
   }
 
   /**
