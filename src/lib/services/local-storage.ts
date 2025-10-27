@@ -62,27 +62,61 @@ export class LocalStorageManager implements LocalStorageManagerInterface {
             throw new Error('LocalStorageManager not initialized');
         }
 
-        const entry: LocalStorageEntry = {
-            noteId: noteData.noteId,
-            data: noteData,
-            storedAt: new Date(),
-            synced: false,
-            syncAttempts: 0
-        };
-
-        return new Promise((resolve, reject) => {
-            const transaction = this.db!.transaction([this.STORE_NAME], 'readwrite');
-            const store = transaction.objectStore(this.STORE_NAME);
-            const request = store.put(entry);
-
-            request.onerror = () => {
-                reject(new Error(`Failed to store note: ${request.error?.message}`));
+        try {
+            // Create a deep serializable copy of the note data
+            // Ensure Uint8Array is properly handled and all Date objects are properly cloned
+            const serializableData: StoredNoteData = {
+                noteId: noteData.noteId,
+                yjsUpdate: new Uint8Array(noteData.yjsUpdate), // Create new Uint8Array to ensure it's cloneable
+                metadata: {
+                    created: new Date(noteData.metadata.created),
+                    modified: new Date(noteData.metadata.modified),
+                    version: noteData.metadata.version,
+                    storachaCID: noteData.metadata.storachaCID,
+                    shareLinks: noteData.metadata.shareLinks ? noteData.metadata.shareLinks.map(link => ({
+                        id: link.id,
+                        url: link.url,
+                        permissions: link.permissions,
+                        created: new Date(link.created),
+                        expiresAt: link.expiresAt ? new Date(link.expiresAt) : undefined
+                    })) : []
+                },
+                versionHistory: noteData.versionHistory.map(version => ({
+                    version: version.version,
+                    timestamp: new Date(version.timestamp),
+                    storachaCID: version.storachaCID,
+                    changeDescription: version.changeDescription
+                }))
             };
 
-            request.onsuccess = () => {
-                resolve();
+            const entry: LocalStorageEntry = {
+                noteId: noteData.noteId,
+                data: serializableData,
+                storedAt: new Date(),
+                synced: false,
+                syncAttempts: 0
             };
-        });
+
+            return new Promise((resolve, reject) => {
+                const transaction = this.db!.transaction([this.STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.put(entry);
+
+                request.onerror = () => {
+                    console.error('IndexedDB put error:', request.error);
+                    console.error('Failed entry:', entry);
+                    reject(new Error(`Failed to store note: ${request.error?.message}`));
+                };
+
+                request.onsuccess = () => {
+                    resolve();
+                };
+            });
+        } catch (error) {
+            console.error('Error preparing note data for storage:', error);
+            console.error('Note data:', noteData);
+            throw error;
+        }
     }
 
     /**

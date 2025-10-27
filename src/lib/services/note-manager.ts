@@ -67,13 +67,16 @@ export class NoteManager implements NoteManagerInterface {
       await this.versionHistoryService.initialize();
       await this.hybridStorageService.initialize();
 
+      // Mark as initialized BEFORE loading notes index to avoid race condition
+      this.initialized = true;
+      
       // Load existing notes index
       await this.loadNotesIndex();
       
-      this.initialized = true;
       console.log('NoteManager initialized successfully');
     } catch (error) {
       console.error('Failed to initialize NoteManager:', error);
+      this.initialized = false; // Reset on error
       throw new Error(`NoteManager initialization failed: ${error}`);
     }
   }
@@ -91,10 +94,8 @@ export class NoteManager implements NoteManagerInterface {
     // Create Yjs document for the note content
     const yjsDocument = yjsDocumentManager.createDocument(noteId);
     
-    // Set initial content if title is provided
-    if (title) {
-      yjsDocumentManager.setTextContent(yjsDocument, `# ${title}\n\n`);
-    }
+    // Don't set initial content - let the editor handle it
+    // The Collaboration extension will manage the document structure
 
     // Create note metadata
     const metadata: NoteMetadata = {

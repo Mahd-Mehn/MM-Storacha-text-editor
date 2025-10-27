@@ -1,4 +1,4 @@
-import type { Client } from '@web3-storage/w3up-client'
+import type { Client } from '@storacha/client'
 import type { StoredNoteData } from '../types/index.js'
 import { authService } from './auth.js'
 import { spaceService } from './space.js'
@@ -28,8 +28,19 @@ export class StorachaClient {
         throw new Error('Failed to get authenticated w3up client')
       }
 
-      // Ensure space is initialized
+      // Ensure a space is set as current
+      await authService.ensureSpaceExists()
+
+      // Ensure space service is initialized
       await spaceService.initialize()
+      
+      // Log the current space for debugging
+      const currentSpace = this.client.currentSpace()
+      if (currentSpace) {
+        console.log('✓ Storacha client ready with space:', currentSpace.name || currentSpace.did())
+      } else {
+        console.warn('⚠ Storacha client initialized but no space is set')
+      }
     } catch (error) {
       console.error('Failed to initialize Storacha client:', error)
       throw new Error('Failed to initialize Storacha storage client')
@@ -37,26 +48,52 @@ export class StorachaClient {
   }
 
   /**
-   * Upload content to Storacha network
+   * Upload content to Storacha network with a meaningful filename
    * Returns the Content Identifier (CID) for the uploaded data
    * Requirements: 2.1 - Auto-save functionality
    */
-  async uploadContent(content: Uint8Array): Promise<string> {
+  async uploadContent(content: Uint8Array, filename?: string): Promise<string> {
     if (!this.client) {
       throw new Error('Storacha client not initialized')
     }
 
+    // Check if client is ready with a space
+    if (!this.isReady()) {
+      const status = this.getStatus()
+      console.warn('Storacha client not ready:', status)
+      console.warn('Content will be saved locally only. To enable cloud storage:')
+      console.warn('1. Login with email using the Settings page')
+      console.warn('2. Verify your email')
+      console.warn('3. Select a payment plan (free tier available)')
+      throw new Error('No space available for upload. Please login with email to enable cloud storage.')
+    }
+
     try {
+      // Create a meaningful filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const finalFilename = filename || `note-${timestamp}.json`
+      
       // Create a new Uint8Array to ensure proper typing, then create File
       const safeContent = new Uint8Array(content)
-      const file = new File([safeContent], 'note-data.bin', { type: 'application/octet-stream' })
+      const file = new File([safeContent], finalFilename, { type: 'application/json' })
+      
+      console.log(`Uploading file: ${finalFilename} (${safeContent.length} bytes)`)
       
       // Upload the file to Storacha
       const cid = await this.client.uploadFile(file)
       
+      console.log(`Successfully uploaded ${finalFilename} with CID: ${cid.toString()}`)
       return cid.toString()
     } catch (error) {
       console.error('Failed to upload content to Storacha:', error)
+      // Provide more helpful error message
+      if (error instanceof Error && error.message.includes('space/blob/add')) {
+        console.error('Space/blob/add error - This usually means:')
+        console.error('1. Email verification is not complete')
+        console.error('2. Payment plan has not been selected')
+        console.error('3. Space does not have upload permissions')
+        throw new Error('Upload failed: Space not provisioned. Please verify your email and select a payment plan at https://console.web3.storage')
+      }
       throw new Error('Failed to upload content to decentralized storage')
     }
   }
@@ -89,7 +126,7 @@ export class StorachaClient {
   }
 
   /**
-   * Upload note data with proper serialization
+   * Upload note data with proper serialization and meaningful filename
    * Handles the complete StoredNoteData structure
    * Requirements: 2.2 - Store each save operation as new version
    */
@@ -116,7 +153,14 @@ export class StorachaClient {
       })
 
       const content = new TextEncoder().encode(jsonString)
-      return await this.uploadContent(content)
+      
+      // Create a meaningful filename: noteId_timestamp_version.json
+      const timestamp = noteData.metadata.modified.toISOString().replace(/[:.]/g, '-')
+      const noteId = noteData.noteId.replace(/[^a-zA-Z0-9]/g, '_')
+      const version = noteData.metadata.version
+      const filename = `${noteId}_${timestamp}_v${version}.json`
+      
+      return await this.uploadContent(content, filename)
     } catch (error) {
       console.error('Failed to upload note data:', error)
       throw new Error('Failed to upload note data to decentralized storage')
@@ -204,10 +248,27 @@ export class StorachaClient {
   }
 
   /**
-   * Check if the client is properly initialized and ready for operations
+   * Check if the client is ready to use
    */
   isReady(): boolean {
-    return this.client !== null && authService.isAuthenticated()
+    if (!this.client) return false;
+    
+    // Check if there's a current space
+    const currentSpace = this.client.currentSpace();
+    if (!currentSpace) {
+      console.warn('Storacha client initialized but no space available. Please create a space or login with email.');
+      return false;
+    }
+    
+    // Check if there's an account (required for provisioned spaces)
+    const accounts = Object.values(this.client.accounts());
+    if (accounts.length === 0) {
+      console.warn('No account found. Space may not be provisioned for uploads.');
+      console.warn('Please login with email to provision the space.');
+      return false;
+    }
+    
+    return authService.isAuthenticated();
   }
 
   /**

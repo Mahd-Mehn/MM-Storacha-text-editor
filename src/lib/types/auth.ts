@@ -1,11 +1,9 @@
-import type { Signer } from '@ucanto/principal/ed25519'
-import type { Client } from '@web3-storage/w3up-client'
-
-type SignerType = Awaited<ReturnType<typeof Signer.generate>>
+import type { Client } from '@storacha/client'
+import type { Agent } from '@storacha/client/types'
 
 export interface AuthState {
   isAuthenticated: boolean
-  principal: SignerType | null
+  principal: Agent | null
   client: Client | null
   did: string | null
 }
@@ -13,17 +11,18 @@ export interface AuthState {
 export interface AuthService {
   initialize(): Promise<void>
   getAuthState(): AuthState
-  createIdentity(): Promise<SignerType>
-  getOrCreateClient(): Promise<Client>
-  storeIdentity(principal: SignerType): void
-  loadStoredIdentity(): SignerType | null
+  getClient(): Client | null
   clearIdentity(): void
-}
-
-export interface StoredIdentity {
-  privateKey: string
-  did: string
-  createdAt: string
+  isAuthenticated(): boolean
+  getCurrentDID(): string | null
+  loginWithEmail(email: string): Promise<void>
+  checkEmailLoginStatus(): boolean
+  getStoredEmail(): string | null
+  checkAccountStatus(): Promise<{
+    hasAccount: boolean
+    hasSpace: boolean
+    email: string | null
+  }>
 }
 
 export interface SpaceInfo {

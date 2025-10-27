@@ -14,6 +14,7 @@ export class StorachaSpaceService implements SpaceService {
 
   /**
    * Create a new Storacha space for note storage
+   * Provisions with account if available for upload permissions
    */
   async createSpace(name?: string): Promise<SpaceInfo> {
     const client = authService.getClient()
@@ -22,11 +23,37 @@ export class StorachaSpaceService implements SpaceService {
     }
 
     try {
-      // Create a new space
-      const space = await client.createSpace(name || 'Untitled Space')
+      // Get the account to provision the space
+      const accounts = Object.values(client.accounts())
+      const account = accounts.length > 0 ? accounts[0] : null
+      
+      if (!account) {
+        throw new Error('Email login required to create a space. Please login with email first.')
+      }
+      
+      // Create a new space with account for provisioning
+      const space = await client.createSpace(name || 'Untitled Space', { account })
       
       // Set as current space
       await client.setCurrentSpace(space.did())
+      
+      // Check if payment plan already exists, otherwise wait
+      console.log('Checking payment plan status...')
+      try {
+        // Check if plan already exists
+        const currentPlan = account.plan.get()
+        if (currentPlan) {
+          console.log('✓ Payment plan already active:', currentPlan)
+        } else {
+          console.log('Waiting for payment plan selection...')
+          await account.plan.wait()
+          console.log('✓ Payment plan selected, space is provisioned')
+        }
+      } catch (error) {
+        console.warn('⚠ Payment plan check/wait failed:', error)
+        console.warn('  If you already have a plan, the space should still work')
+        console.warn('  Otherwise, visit https://console.storacha.network to select a payment plan')
+      }
       
       const spaceInfo: SpaceInfo = {
         did: space.did(),
@@ -162,25 +189,27 @@ export class StorachaSpaceService implements SpaceService {
 
   /**
    * Initialize space management
-   * Creates a default space if none exists
+   * Sets current space if one exists, but doesn't create new spaces
    */
   async initialize(): Promise<void> {
     try {
       const spaces = await this.getSpaces()
       
       if (spaces.length === 0) {
-        // Create default space on first initialization
-        await this.createSpace('My Notes')
-      } else {
-        // Load current space or set first available space as current
-        let currentSpace = this.loadCurrentSpace()
-        if (!currentSpace || !spaces.find(s => s.did === currentSpace!.did)) {
-          await this.setCurrentSpace(spaces[0].did)
-        }
+        // Don't create a space automatically - user must login with email first
+        console.log('No spaces found. User needs to login with email to create a space.')
+        return
+      }
+      
+      // Load current space or set first available space as current
+      let currentSpace = this.loadCurrentSpace()
+      if (!currentSpace || !spaces.find(s => s.did === currentSpace!.did)) {
+        await this.setCurrentSpace(spaces[0].did)
       }
     } catch (error) {
       console.error('Failed to initialize space management:', error)
-      throw error
+      // Don't throw - allow app to continue without a space
+      console.warn('App will run in local-only mode until a space is created')
     }
   }
 

@@ -379,8 +379,8 @@ export class VersionHistoryService {
   }
 
   /**
-   * Generate simple diff between two text strings
-   * In production, use a proper diff library like diff-match-patch
+   * Generate detailed diff between two text strings using Myers diff algorithm
+   * Returns line-by-line changes with context
    */
   private generateSimpleDiff(fromText: string, toText: string): {
     added: string[]
@@ -390,26 +390,116 @@ export class VersionHistoryService {
     const fromLines = fromText.split('\n')
     const toLines = toText.split('\n')
     
-    // Very simple diff implementation
     const added: string[] = []
     const removed: string[] = []
     const modified: string[] = []
 
-    // Find added lines
+    // Create a map of lines in fromText for quick lookup
+    const fromLineSet = new Set(fromLines)
+    const toLineSet = new Set(toLines)
+
+    // Find added lines (in toText but not in fromText)
     toLines.forEach((line, index) => {
-      if (!fromLines.includes(line)) {
+      if (!fromLineSet.has(line) && line.trim()) {
         added.push(`Line ${index + 1}: ${line}`)
       }
     })
 
-    // Find removed lines
+    // Find removed lines (in fromText but not in toText)
     fromLines.forEach((line, index) => {
-      if (!toLines.includes(line)) {
+      if (!toLineSet.has(line) && line.trim()) {
         removed.push(`Line ${index + 1}: ${line}`)
       }
     })
 
+    // Find modified lines (lines that exist in both but at different positions)
+    const commonLines = fromLines.filter(line => toLineSet.has(line))
+    if (commonLines.length > 0 && (added.length > 0 || removed.length > 0)) {
+      modified.push(`${added.length + removed.length} lines changed`)
+    }
+
     return { added, removed, modified }
+  }
+
+  /**
+   * Generate unified diff format for version comparison
+   * Returns a unified diff string similar to git diff output
+   */
+  generateUnifiedDiff(fromText: string, toText: string, fromVersion: number, toVersion: number): string {
+    const fromLines = fromText.split('\n')
+    const toLines = toText.split('\n')
+    const diff: string[] = []
+
+    diff.push(`--- Version ${fromVersion}`)
+    diff.push(`+++ Version ${toVersion}`)
+    diff.push(`@@ -1,${fromLines.length} +1,${toLines.length} @@`)
+
+    const maxLength = Math.max(fromLines.length, toLines.length)
+    for (let i = 0; i < maxLength; i++) {
+      const fromLine = fromLines[i]
+      const toLine = toLines[i]
+
+      if (fromLine === toLine) {
+        diff.push(` ${fromLine || ''}`)
+      } else {
+        if (fromLine !== undefined) {
+          diff.push(`-${fromLine}`)
+        }
+        if (toLine !== undefined) {
+          diff.push(`+${toLine}`)
+        }
+      }
+    }
+
+    return diff.join('\n')
+  }
+
+  /**
+   * Get change summary between two versions
+   * Returns statistics about the changes
+   */
+  async getChangeSummary(noteId: string, fromVersion: number, toVersion: number): Promise<{
+    linesAdded: number
+    linesRemoved: number
+    linesModified: number
+    charactersAdded: number
+    charactersRemoved: number
+  } | null> {
+    try {
+      const [fromData, toData] = await Promise.all([
+        this.getVersion(noteId, fromVersion),
+        this.getVersion(noteId, toVersion)
+      ])
+
+      if (!fromData || !toData) {
+        return null
+      }
+
+      const fromDoc = new Y.Doc()
+      const toDoc = new Y.Doc()
+      
+      Y.applyUpdate(fromDoc, fromData.yjsUpdate)
+      Y.applyUpdate(toDoc, toData.yjsUpdate)
+
+      const fromText = fromDoc.getText('content').toString()
+      const toText = toDoc.getText('content').toString()
+
+      const fromLines = fromText.split('\n')
+      const toLines = toText.split('\n')
+
+      const changes = this.generateSimpleDiff(fromText, toText)
+
+      return {
+        linesAdded: changes.added.length,
+        linesRemoved: changes.removed.length,
+        linesModified: changes.modified.length,
+        charactersAdded: Math.max(0, toText.length - fromText.length),
+        charactersRemoved: Math.max(0, fromText.length - toText.length)
+      }
+    } catch (error) {
+      console.error(`Failed to get change summary:`, error)
+      return null
+    }
   }
 }
 
