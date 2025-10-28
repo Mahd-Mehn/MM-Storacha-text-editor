@@ -165,10 +165,14 @@ src/
 - Conflict-free synchronization with Yjs CRDTs
 
 ### 4. Version History
-- Automatic version creation on save
-- Version comparison with diff view
+- Automatic version creation on save with detailed metadata
+- Advanced version comparison with side-by-side, inline, and unified diff views
 - One-click version restoration
-- Version metadata and timestamps
+- Version metadata including change type, file size, and diff statistics
+- Content hashing for quick comparison
+- Tag-based version organization
+
+See [VERSIONING.md](./VERSIONING.md) for detailed documentation on the versioning system.
 
 ### 5. Rich Text Editing
 - Tiptap editor with extensions
