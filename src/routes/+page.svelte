@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { RichTextEditor } from '$lib';
   import { noteManager, yjsDocumentManager } from '$lib/services';
   import { notificationService } from '$lib/services/notification';
@@ -8,6 +9,8 @@
   import { autoMigrate } from '$lib/utils/storage-migration';
   import ShareNoteDialog from '$lib/components/ShareNoteDialog.svelte';
   import VersionHistorySidebar from '$lib/components/VersionHistorySidebar.svelte';
+  import VersionDiffViewer from '$lib/components/VersionDiffViewer.svelte';
+  import { versionHistoryService } from '$lib/services';
   import type { Note } from '$lib/types';
   import type { Doc as YDoc } from 'yjs';
   
@@ -18,11 +21,43 @@
   let isSaving = $state(false);
   let showShareDialog = $state(false);
   let showVersionHistory = $state(false);
+  let showDiffViewer = $state(false);
+  let compareFromVersion = $state<number | null>(null);
+  let compareToVersion = $state<number | null>(null);
   let lastSaved = $state<Date | null>(null);
   
   onMount(async () => {
     await initializeEditor();
   });
+
+  // Reactive effect to reload note when URL changes
+  $effect(() => {
+    const noteId = $page.url.searchParams.get('noteId');
+    if (noteId && currentNote && noteId !== currentNote.id) {
+      loadNoteById(noteId);
+    }
+  });
+
+  async function loadNoteById(noteId: string) {
+    try {
+      const loadedNote = await noteManager.loadNote(noteId);
+      if (loadedNote) {
+        currentNote = loadedNote;
+        yjsDocument = loadedNote.content;
+        noteTitle = loadedNote.title;
+        editorContent = '';
+      } else {
+        notificationService.error('Note not found', 'The requested note could not be loaded');
+        goto('/notes');
+      }
+    } catch (error) {
+      await errorHandler.handleError(
+        error instanceof Error ? error : new Error('Failed to load note'),
+        { operation: 'load_note', noteId }
+      );
+      notificationService.error('Failed to load note', 'Please try again');
+    }
+  }
 
   async function initializeEditor() {
     try {
@@ -39,7 +74,24 @@
       // Initialize note manager
       await noteManager.initialize();
       
-      // Create a new note
+      // Check if there's a noteId in the URL query parameter
+      const noteId = $page.url.searchParams.get('noteId');
+      
+      if (noteId) {
+        // Load existing note
+        const loadedNote = await noteManager.loadNote(noteId);
+        if (loadedNote) {
+          currentNote = loadedNote;
+          yjsDocument = loadedNote.content;
+          noteTitle = loadedNote.title;
+          editorContent = '';
+          return;
+        } else {
+          notificationService.error('Note not found', 'The requested note could not be loaded');
+        }
+      }
+      
+      // Create a new note if no noteId or note not found
       currentNote = await noteManager.createNote('Welcome to Storacha Notes');
       yjsDocument = currentNote.content;
       noteTitle = currentNote.title;
@@ -87,6 +139,38 @@
 
   function goToNotesList() {
     goto('/notes');
+  }
+
+  function handleCompareVersions(fromVersion: number, toVersion: number) {
+    compareFromVersion = fromVersion;
+    compareToVersion = toVersion;
+    showDiffViewer = true;
+  }
+
+  function closeDiffViewer() {
+    showDiffViewer = false;
+    compareFromVersion = null;
+    compareToVersion = null;
+  }
+
+  async function handleVersionRestore(version: number) {
+    if (!currentNote) return;
+    
+    try {
+      const restoredNote = await versionHistoryService.restoreVersion(currentNote.id, version);
+      if (restoredNote) {
+        currentNote = restoredNote;
+        yjsDocument = restoredNote.content;
+        noteTitle = restoredNote.title;
+        notificationService.success('Version restored', `Restored to version ${version}`);
+      }
+    } catch (error) {
+      await errorHandler.handleError(
+        error instanceof Error ? error : new Error('Failed to restore version'),
+        { operation: 'restore_version', noteId: currentNote.id, version }
+      );
+      notificationService.error('Restore failed', 'Could not restore this version');
+    }
   }
 </script>
 
@@ -180,14 +264,8 @@
           noteId={currentNote.id}
           currentVersion={currentNote.metadata.version}
           onVersionSelect={(version) => console.log('Selected version:', version)}
-          onVersionRestore={async (version) => {
-            const restored = await noteManager.loadNote(currentNote.id);
-            if (restored) {
-              currentNote = restored;
-              yjsDocument = restored.content;
-              notificationService.success('Version restored', `Restored to version ${version}`);
-            }
-          }}
+          onVersionRestore={handleVersionRestore}
+          onCompareVersions={handleCompareVersions}
         />
       </aside>
     {/if}
@@ -200,6 +278,25 @@
     note={currentNote}
     onClose={() => showShareDialog = false}
   />
+{/if}
+
+<!-- Version Diff Viewer Modal -->
+{#if showDiffViewer && currentNote && compareFromVersion !== null && compareToVersion !== null}
+  <div class="diff-modal" onclick={closeDiffViewer}>
+    <div class="diff-modal-content" onclick={(e) => e.stopPropagation()}>
+      <div class="diff-modal-header">
+        <h2>Version Comparison</h2>
+        <button class="close-button" onclick={closeDiffViewer}>✕</button>
+      </div>
+      <div class="diff-modal-body">
+        <VersionDiffViewer 
+          noteId={currentNote.id}
+          fromVersion={compareFromVersion}
+          toVersion={compareToVersion}
+        />
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -397,6 +494,67 @@
     }
   }
 
+  /* Diff Modal */
+  .diff-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 2rem;
+  }
+
+  .diff-modal-content {
+    background: white;
+    border-radius: 0.5rem;
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .diff-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .diff-modal-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+  }
+
+  .close-button {
+    padding: 0.5rem;
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6b7280;
+    transition: color 0.2s;
+    line-height: 1;
+  }
+
+  .close-button:hover {
+    color: #111827;
+  }
+
+  .diff-modal-body {
+    flex: 1;
+    overflow: hidden;
+  }
+
   @media (max-width: 768px) {
     .top-nav {
       flex-wrap: wrap;
@@ -424,6 +582,14 @@
 
     .editor-container {
       padding: 1rem;
+    }
+
+    .diff-modal {
+      padding: 1rem;
+    }
+
+    .diff-modal-content {
+      max-height: 95vh;
     }
   }
 </style>

@@ -69,6 +69,18 @@ export interface VersionEntry {
   storachaCID: string;
   /** Human-readable description of changes in this version */
   changeDescription: string;
+  /** Size of the version content in bytes */
+  contentSize?: number;
+  /** Type of change made in this version */
+  changeType?: 'create' | 'edit' | 'major-edit' | 'minor-edit' | 'restore';
+  /** Hash of the content for quick comparison */
+  contentHash?: string;
+  /** Number of lines added compared to previous version */
+  linesAdded?: number;
+  /** Number of lines removed compared to previous version */
+  linesRemoved?: number;
+  /** Tags associated with this version */
+  tags?: string[];
 }
 
 /**

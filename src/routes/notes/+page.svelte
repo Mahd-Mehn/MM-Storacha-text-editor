@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { noteManager } from '$lib/services';
   import { notificationService } from '$lib/services/notification';
   import { errorHandler } from '$lib/services/error-handler';
@@ -71,6 +72,11 @@
       );
       notificationService.error('Failed to create note', 'Please try again');
     }
+  }
+
+  function openNote(noteId: string) {
+    // Navigate to the main editor page with the noteId as a query parameter
+    goto(`/?noteId=${noteId}`);
   }
 
   async function deleteNote(noteId: string) {
@@ -187,7 +193,11 @@
   {:else}
     <div class="notes-grid">
       {#each displayedNotes as note (note.id)}
-        <div class="note-card" class:selected={note.id === selectedNoteId}>
+        <div 
+          class="note-card" 
+          class:selected={note.id === selectedNoteId}
+          onclick={() => openNote(note.id)}
+        >
           <div class="note-header">
             <h3 class="note-title">{note.title}</h3>
             <div class="note-actions">

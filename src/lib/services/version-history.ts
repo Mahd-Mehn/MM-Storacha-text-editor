@@ -1,6 +1,7 @@
 import type { Note, VersionEntry, StoredNoteData } from '../types/index.js'
 import { storachaClient } from './storacha.js'
 import * as Y from 'yjs'
+import * as Diff from 'diff'
 
 /**
  * Version History Service
@@ -30,12 +31,14 @@ export class VersionHistoryService {
   async createVersion(
     noteId: string, 
     yjsUpdate: Uint8Array, 
-    changeDescription?: string
+    changeDescription?: string,
+    tags?: string[]
   ): Promise<VersionEntry> {
     try {
       // Get existing version history
       const existingVersions = await this.getVersionHistory(noteId)
       const newVersionNumber = existingVersions.length + 1
+      const isFirstVersion = newVersionNumber === 1
 
       // Create version data structure
       const versionData: StoredNoteData = {
@@ -54,12 +57,76 @@ export class VersionHistoryService {
       // Upload version to Storacha
       const cid = await storachaClient.uploadNoteData(versionData)
 
-      // Create version entry
+      // Calculate content size
+      const contentSize = yjsUpdate.byteLength
+
+      // Generate content hash for quick comparison
+      const contentHash = await this.generateContentHash(yjsUpdate)
+
+      // Determine change type and calculate diff stats
+      let changeType: 'create' | 'edit' | 'major-edit' | 'minor-edit' | 'restore' = 'edit'
+      let linesAdded = 0
+      let linesRemoved = 0
+
+      if (isFirstVersion) {
+        changeType = 'create'
+        // For first version, count all lines as added
+        const doc = new Y.Doc()
+        Y.applyUpdate(doc, yjsUpdate)
+        const text = doc.getText('content').toString()
+        linesAdded = text.split('\n').length
+      } else {
+        // Compare with previous version
+        const previousVersion = existingVersions[existingVersions.length - 1]
+        const previousData = await this.getVersion(noteId, previousVersion.version)
+        
+        if (previousData) {
+          const currentDoc = new Y.Doc()
+          const previousDoc = new Y.Doc()
+          
+          Y.applyUpdate(currentDoc, yjsUpdate)
+          Y.applyUpdate(previousDoc, previousData.yjsUpdate)
+          
+          const currentText = currentDoc.getText('content').toString()
+          const previousText = previousDoc.getText('content').toString()
+          
+          // Calculate diff stats
+          const changes = Diff.diffLines(previousText, currentText)
+          changes.forEach(part => {
+            if (part.added) {
+              linesAdded += part.count || 0
+            } else if (part.removed) {
+              linesRemoved += part.count || 0
+            }
+          })
+          
+          // Determine change type based on magnitude
+          const totalChanges = linesAdded + linesRemoved
+          const totalLines = currentText.split('\n').length
+          const changePercentage = (totalChanges / Math.max(totalLines, 1)) * 100
+          
+          if (changePercentage > 50) {
+            changeType = 'major-edit'
+          } else if (changePercentage > 10) {
+            changeType = 'edit'
+          } else {
+            changeType = 'minor-edit'
+          }
+        }
+      }
+
+      // Create version entry with enhanced metadata
       const versionEntry: VersionEntry = {
         version: newVersionNumber,
         timestamp: new Date(),
         storachaCID: cid,
-        changeDescription: changeDescription || `Version ${newVersionNumber}`
+        changeDescription: changeDescription || `Version ${newVersionNumber}`,
+        contentSize,
+        changeType,
+        contentHash,
+        linesAdded,
+        linesRemoved,
+        tags
       }
 
       // Update version history
@@ -73,6 +140,23 @@ export class VersionHistoryService {
     } catch (error) {
       console.error(`Failed to create version for note ${noteId}:`, error)
       throw new Error('Failed to create note version')
+    }
+  }
+
+  /**
+   * Generate a hash of the content for quick comparison
+   */
+  private async generateContentHash(content: Uint8Array): Promise<string> {
+    try {
+      // Create a new Uint8Array to ensure proper typing
+      const buffer = new Uint8Array(content)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+      return hashHex
+    } catch (error) {
+      console.error('Failed to generate content hash:', error)
+      return ''
     }
   }
 
@@ -387,38 +471,51 @@ export class VersionHistoryService {
     removed: string[]
     modified: string[]
   } {
-    const fromLines = fromText.split('\n')
-    const toLines = toText.split('\n')
+    const changes = Diff.diffLines(fromText, toText)
     
     const added: string[] = []
     const removed: string[] = []
     const modified: string[] = []
 
-    // Create a map of lines in fromText for quick lookup
-    const fromLineSet = new Set(fromLines)
-    const toLineSet = new Set(toLines)
-
-    // Find added lines (in toText but not in fromText)
-    toLines.forEach((line, index) => {
-      if (!fromLineSet.has(line) && line.trim()) {
-        added.push(`Line ${index + 1}: ${line}`)
+    changes.forEach((part) => {
+      if (part.added) {
+        const lines = part.value.split('\n').filter(line => line.trim())
+        lines.forEach(line => added.push(line))
+      } else if (part.removed) {
+        const lines = part.value.split('\n').filter(line => line.trim())
+        lines.forEach(line => removed.push(line))
       }
     })
 
-    // Find removed lines (in fromText but not in toText)
-    fromLines.forEach((line, index) => {
-      if (!toLineSet.has(line) && line.trim()) {
-        removed.push(`Line ${index + 1}: ${line}`)
-      }
-    })
-
-    // Find modified lines (lines that exist in both but at different positions)
-    const commonLines = fromLines.filter(line => toLineSet.has(line))
-    if (commonLines.length > 0 && (added.length > 0 || removed.length > 0)) {
-      modified.push(`${added.length + removed.length} lines changed`)
+    // Count modified lines (lines that were both added and removed)
+    const minChanges = Math.min(added.length, removed.length)
+    if (minChanges > 0) {
+      modified.push(`${minChanges} lines modified`)
     }
 
     return { added, removed, modified }
+  }
+
+  /**
+   * Generate detailed word-level diff for fine-grained comparison
+   */
+  generateWordDiff(fromText: string, toText: string): Array<{
+    value: string
+    added?: boolean
+    removed?: boolean
+  }> {
+    return Diff.diffWords(fromText, toText)
+  }
+
+  /**
+   * Generate character-level diff for very precise comparison
+   */
+  generateCharDiff(fromText: string, toText: string): Array<{
+    value: string
+    added?: boolean
+    removed?: boolean
+  }> {
+    return Diff.diffChars(fromText, toText)
   }
 
   /**

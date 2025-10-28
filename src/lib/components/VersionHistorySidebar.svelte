@@ -118,6 +118,16 @@
     }
     return '';
   }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    } else if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    } else {
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+  }
 </script>
 
 <div class="version-history-sidebar">
@@ -203,6 +213,44 @@
           {#if version.changeDescription}
             <div class="version-description">
               {version.changeDescription}
+            </div>
+          {/if}
+
+          <div class="version-stats">
+            {#if version.changeType}
+              <span class="stat-badge change-type" class:create={version.changeType === 'create'} 
+                    class:major={version.changeType === 'major-edit'} 
+                    class:minor={version.changeType === 'minor-edit'}>
+                {version.changeType === 'create' ? '✨ Created' : 
+                 version.changeType === 'major-edit' ? '🔥 Major Edit' :
+                 version.changeType === 'minor-edit' ? '✏️ Minor Edit' :
+                 version.changeType === 'restore' ? '↺ Restored' : '📝 Edit'}
+              </span>
+            {/if}
+            
+            {#if version.linesAdded !== undefined || version.linesRemoved !== undefined}
+              <span class="stat-badge changes">
+                {#if version.linesAdded && version.linesAdded > 0}
+                  <span class="added">+{version.linesAdded}</span>
+                {/if}
+                {#if version.linesRemoved && version.linesRemoved > 0}
+                  <span class="removed">-{version.linesRemoved}</span>
+                {/if}
+              </span>
+            {/if}
+            
+            {#if version.contentSize}
+              <span class="stat-badge size">
+                {formatSize(version.contentSize)}
+              </span>
+            {/if}
+          </div>
+
+          {#if version.tags && version.tags.length > 0}
+            <div class="version-tags">
+              {#each version.tags as tag}
+                <span class="tag">{tag}</span>
+              {/each}
             </div>
           {/if}
 
@@ -427,5 +475,77 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .version-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+  }
+
+  .stat-badge.change-type {
+    background: #e0e7ff;
+    color: #3730a3;
+  }
+
+  .stat-badge.change-type.create {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .stat-badge.change-type.major {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .stat-badge.change-type.minor {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .stat-badge.changes {
+    background: #f3f4f6;
+    color: #374151;
+  }
+
+  .stat-badge.changes .added {
+    color: #166534;
+    font-weight: 600;
+  }
+
+  .stat-badge.changes .removed {
+    color: #991b1b;
+    font-weight: 600;
+  }
+
+  .stat-badge.size {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .version-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
+
+  .tag {
+    padding: 0.125rem 0.5rem;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
   }
 </style>
