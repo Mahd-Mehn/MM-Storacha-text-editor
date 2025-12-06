@@ -1,34 +1,102 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { workspaceState, type Page } from "$lib/stores/workspace";
+  import { onMount } from "svelte";
+  import { clickOutside } from "$lib/utils/click-outside";
 
-  export let page: {
-    id: string;
-    title: string;
-    icon?: string;
-    children: any[];
-  };
+  export let page: Page;
   export let level = 0;
 
-  let expanded = false;
   let isHovered = false;
+  let showContextMenu = false;
+  let contextMenuX = 0;
+  let contextMenuY = 0;
+  let isRenaming = false;
+  let renameValue = page.title;
+  let renameInput: HTMLInputElement;
+
+  $: expanded = $workspaceState.expandedIds.has(page.id);
+  $: isSelected = $workspaceState.selectedPageId === page.id;
 
   function toggleExpanded(e: Event) {
     e.stopPropagation();
-    expanded = !expanded;
+    if (page.type === "folder") {
+      workspaceState.toggleExpanded(page.id);
+    }
   }
 
   function handleClick() {
+    workspaceState.selectPage(page.id);
     goto(`/page/${page.id}`);
   }
 
-  function handleAddSubpage(e: Event) {
+  function handleContextMenu(e: MouseEvent) {
+    e.preventDefault();
     e.stopPropagation();
-    console.log("Add subpage to:", page.id);
+    contextMenuX = e.clientX;
+    contextMenuY = e.clientY;
+    showContextMenu = true;
   }
 
-  function handleMore(e: Event) {
-    e.stopPropagation();
-    console.log("Show more menu for:", page.id);
+  function closeContextMenu() {
+    showContextMenu = false;
+  }
+
+  function startRename() {
+    isRenaming = true;
+    renameValue = page.title;
+    showContextMenu = false;
+    setTimeout(() => {
+      renameInput?.focus();
+      renameInput?.select();
+    }, 10);
+  }
+
+  function finishRename() {
+    if (renameValue.trim() && renameValue !== page.title) {
+      workspaceState.renamePage(page.id, renameValue.trim());
+    }
+    isRenaming = false;
+  }
+
+  function cancelRename() {
+    renameValue = page.title;
+    isRenaming = false;
+  }
+
+  function handleRenameKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      finishRename();
+    } else if (e.key === "Escape") {
+      cancelRename();
+    }
+  }
+
+  function handleAddSubpage() {
+    workspaceState.createPage("Untitled", "📄", "file", page.id);
+    showContextMenu = false;
+  }
+
+  function handleAddFolder() {
+    workspaceState.createPage("New Folder", "📁", "folder", page.id);
+    showContextMenu = false;
+  }
+
+  function handleDelete() {
+    if (confirm(`Delete "${page.title}"?`)) {
+      workspaceState.deletePage(page.id);
+    }
+    showContextMenu = false;
+  }
+
+  function handleDuplicate() {
+    workspaceState.createPage(
+      `${page.title} (Copy)`,
+      page.icon,
+      page.type,
+      page.parentId
+    );
+    showContextMenu = false;
   }
 </script>
 
@@ -36,15 +104,17 @@
   <div
     class="page-item"
     class:has-children={page.children.length > 0}
+    class:selected={isSelected}
     style="padding-left: {level * 1.25 + 0.5}rem"
     on:click={handleClick}
+    on:contextmenu={handleContextMenu}
     on:mouseenter={() => (isHovered = true)}
     on:mouseleave={() => (isHovered = false)}
     role="button"
     tabindex="0"
   >
     <!-- Expand/Collapse Button -->
-    {#if page.children.length > 0}
+    {#if page.type === "folder"}
       <button
         class="expand-btn"
         class:expanded
@@ -67,32 +137,55 @@
 
     <!-- Page Icon -->
     <div class="page-icon">
-      {page.icon || "📄"}
+      {page.icon}
     </div>
 
-    <!-- Page Title -->
-    <div class="page-title">
-      {page.title}
-    </div>
+    <!-- Page Title (editable) -->
+    {#if isRenaming}
+      <input
+        bind:this={renameInput}
+        bind:value={renameValue}
+        on:blur={finishRename}
+        on:keydown={handleRenameKeydown}
+        class="rename-input"
+        type="text"
+      />
+    {:else}
+      <div class="page-title">
+        {page.title}
+      </div>
+    {/if}
 
     <!-- Actions (shown on hover) -->
-    {#if isHovered}
+    {#if isHovered && !isRenaming}
       <div class="page-actions">
+        {#if page.type === "folder"}
+          <button
+            class="action-btn"
+            on:click={(e) => {
+              e.stopPropagation();
+              handleAddSubpage();
+            }}
+            title="Add page"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path
+                d="M7 3v8M3 7h8"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        {/if}
         <button
           class="action-btn"
-          on:click={handleAddSubpage}
-          title="Add subpage"
+          on:click={(e) => {
+            e.stopPropagation();
+            handleContextMenu(e);
+          }}
+          title="More options"
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path
-              d="M7 3v8M3 7h8"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-            />
-          </svg>
-        </button>
-        <button class="action-btn" on:click={handleMore} title="More options">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <circle cx="7" cy="3" r="1" fill="currentColor" />
             <circle cx="7" cy="7" r="1" fill="currentColor" />
@@ -113,6 +206,40 @@
   {/if}
 </div>
 
+<!-- Context Menu -->
+{#if showContextMenu}
+  <div
+    class="context-menu"
+    style="left: {contextMenuX}px; top: {contextMenuY}px"
+    use:clickOutside={closeContextMenu}
+  >
+    <button class="context-menu-item" on:click={startRename}>
+      <span class="context-icon">✏️</span>
+      Rename
+    </button>
+    {#if page.type === "folder"}
+      <button class="context-menu-item" on:click={handleAddSubpage}>
+        <span class="context-icon">📄</span>
+        New Page
+      </button>
+      <button class="context-menu-item" on:click={handleAddFolder}>
+        <span class="context-icon">📁</span>
+        New Folder
+      </button>
+      <div class="context-divider"></div>
+    {/if}
+    <button class="context-menu-item" on:click={handleDuplicate}>
+      <span class="context-icon">📋</span>
+      Duplicate
+    </button>
+    <div class="context-divider"></div>
+    <button class="context-menu-item danger" on:click={handleDelete}>
+      <span class="context-icon">🗑️</span>
+      Delete
+    </button>
+  </div>
+{/if}
+
 <style>
   .page-item-container {
     display: flex;
@@ -127,17 +254,21 @@
     padding-right: 0.25rem;
     border-radius: 0.375rem;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
     position: relative;
     user-select: none;
   }
 
   .page-item:hover {
-    background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+    background: var(--bg-hover);
+  }
+
+  .page-item.selected {
+    background: var(--bg-active);
   }
 
   .page-item:active {
-    background: var(--bg-active, rgba(0, 0, 0, 0.08));
+    transform: scale(0.98);
   }
 
   .expand-btn {
@@ -149,7 +280,7 @@
     background: transparent;
     border: none;
     border-radius: 0.25rem;
-    color: var(--text-secondary, #6b7280);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
     flex-shrink: 0;
@@ -157,7 +288,7 @@
   }
 
   .expand-btn:hover {
-    background: var(--bg-hover, rgba(0, 0, 0, 0.1));
+    background: var(--bg-hover);
   }
 
   .expand-btn svg {
@@ -187,11 +318,24 @@
     flex: 1;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text-primary, #1a1a1a);
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+  }
+
+  .rename-input {
+    flex: 1;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 2px solid var(--border-input-focus);
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-glow);
   }
 
   .page-actions {
@@ -211,20 +355,86 @@
     background: transparent;
     border: none;
     border-radius: 0.25rem;
-    color: var(--text-secondary, #6b7280);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s;
     padding: 0;
   }
 
   .action-btn:hover {
-    background: var(--bg-hover, rgba(0, 0, 0, 0.1));
-    color: var(--text-primary, #1a1a1a);
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .children {
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
+  }
+
+  /* Context Menu */
+  .context-menu {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-lg);
+    padding: 0.375rem;
+    min-width: 180px;
+    z-index: 1000;
+    animation: contextMenuAppear 0.15s ease-out;
+  }
+
+  @keyframes contextMenuAppear {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: none;
+    border-radius: 0.375rem;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+  }
+
+  .context-menu-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .context-menu-item.danger {
+    color: #ef4444;
+  }
+
+  .context-menu-item.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  .context-icon {
+    font-size: 1rem;
+    width: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .context-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.25rem 0;
   }
 </style>
