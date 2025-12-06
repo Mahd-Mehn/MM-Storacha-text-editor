@@ -1,418 +1,174 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { authService } from '$lib/services/auth';
-  import { storachaClient } from '$lib/services/storacha';
-  import { notificationService } from '$lib/services/notification';
-  import { goto } from '$app/navigation';
-  
-  let email = $state('');
-  let isLoggingIn = $state(false);
-  let accountStatus = $state<{
-    hasAccount: boolean;
-    hasSpace: boolean;
-    email: string | null;
-  }>({ hasAccount: false, hasSpace: false, email: null });
-  let clientStatus = $state<{
-    initialized: boolean;
-    authenticated: boolean;
-    currentSpace: string | null;
-    clientReady: boolean;
-  }>({ initialized: false, authenticated: false, currentSpace: null, clientReady: false });
-  
-  onMount(async () => {
-    await loadStatus();
-  });
-  
-  async function loadStatus() {
-    try {
-      accountStatus = await authService.checkAccountStatus();
-      clientStatus = storachaClient.getStatus();
-    } catch (error) {
-      console.error('Failed to load status:', error);
-    }
-  }
-  
-  async function handleEmailLogin() {
-    if (!email || !email.includes('@')) {
-      notificationService.error('Invalid email', 'Please enter a valid email address');
-      return;
-    }
-    
-    isLoggingIn = true;
-    try {
-      await authService.loginWithEmail(email);
-      notificationService.success(
-        'Check your email', 
-        'We sent you a verification link. Click it to complete setup.'
-      );
-      await loadStatus();
-    } catch (error) {
-      notificationService.error(
-        'Login failed', 
-        error instanceof Error ? error.message : 'Please try again'
-      );
-    } finally {
-      isLoggingIn = false;
-    }
-  }
-  
-  function goBack() {
-    goto('/');
+  import { userStore } from "$lib/stores/user";
+
+  let name = $userStore.name;
+  let email = $userStore.email;
+  let saved = false;
+
+  function saveProfile() {
+    userStore.updateUser({ name, email });
+    saved = true;
+    setTimeout(() => (saved = false), 2000);
   }
 </script>
 
 <div class="settings-page">
-  <div class="settings-container">
-    <div class="settings-header">
-      <button class="back-button" onclick={goBack}>
-        ← Back
+  <header class="page-header">
+    <h1>Settings</h1>
+    <p>Manage your profile and preferences</p>
+  </header>
+
+  <div class="settings-content">
+    <section class="settings-section">
+      <h2>Profile Information</h2>
+
+      <div class="form-group">
+        <label for="name">Name</label>
+        <input
+          id="name"
+          type="text"
+          bind:value={name}
+          placeholder="Your name"
+          class="input-field"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          bind:value={email}
+          placeholder="your.email@example.com"
+          class="input-field"
+        />
+      </div>
+
+      <button class="save-btn" on:click={saveProfile}>
+        {#if saved}
+          ✓ Saved!
+        {:else}
+          Save Changes
+        {/if}
       </button>
-      <h1>Settings</h1>
-    </div>
-    
-    <div class="settings-content">
-      <!-- Storage Status -->
-      <section class="settings-section">
-        <h2>Storage Status</h2>
-        <div class="status-grid">
-          <div class="status-item">
-            <span class="status-label">Authentication:</span>
-            <span class="status-value {clientStatus.authenticated ? 'success' : 'warning'}">
-              {clientStatus.authenticated ? '✓ Authenticated' : '⚠ Not authenticated'}
-            </span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">Cloud Storage:</span>
-            <span class="status-value {clientStatus.clientReady ? 'success' : 'warning'}">
-              {clientStatus.clientReady ? '✓ Ready' : '⚠ Not configured'}
-            </span>
-          </div>
-          {#if accountStatus.email}
-            <div class="status-item">
-              <span class="status-label">Email:</span>
-              <span class="status-value">{accountStatus.email}</span>
-            </div>
-          {/if}
-          {#if clientStatus.currentSpace}
-            <div class="status-item">
-              <span class="status-label">Space DID:</span>
-              <span class="status-value mono">{clientStatus.currentSpace.slice(0, 20)}...</span>
-            </div>
-          {/if}
-        </div>
-      </section>
-      
-      <!-- Email Login -->
-      {#if !accountStatus.hasAccount}
-        <section class="settings-section">
-          <h2>Enable Cloud Storage</h2>
-          <p class="section-description">
-            Login with email to provision cloud storage space. This enables:
-          </p>
-          <ul class="feature-list">
-            <li>✓ Automatic backup to decentralized storage</li>
-            <li>✓ Access notes from any device</li>
-            <li>✓ Share notes via IPFS links</li>
-            <li>✓ Version history in the cloud</li>
-          </ul>
-          
-          <div class="email-login-form">
-            <input 
-              type="email" 
-              class="email-input"
-              bind:value={email}
-              placeholder="your@email.com"
-              disabled={isLoggingIn}
-            />
-            <button 
-              class="login-button"
-              onclick={handleEmailLogin}
-              disabled={isLoggingIn || !email}
-            >
-              {#if isLoggingIn}
-                <span class="spinner-small"></span>
-                Sending...
-              {:else}
-                Login with Email
-              {/if}
-            </button>
-          </div>
-          
-          <div class="info-box">
-            <strong>Note:</strong> Without email login, your notes are stored locally only. 
-            They won't sync across devices or backup to the cloud.
-          </div>
-        </section>
-      {:else}
-        <section class="settings-section">
-          <h2>Cloud Storage Active</h2>
-          <p class="success-message">
-            ✓ Your notes are being backed up to decentralized storage
-          </p>
-          {#if !clientStatus.clientReady}
-            <div class="warning-box">
-              <strong>Setup incomplete:</strong> Please check your email and complete the verification process.
-              After verification, select a payment plan (free tier available).
-            </div>
-          {/if}
-        </section>
-      {/if}
-      
-      <!-- About -->
-      <section class="settings-section">
-        <h2>About</h2>
-        <p>
-          Storacha Notes uses decentralized storage powered by 
-          <a href="https://storacha.network" target="_blank" rel="noopener">Storacha</a> 
-          and IPFS. Your notes are encrypted and stored across a distributed network.
-        </p>
-      </section>
-    </div>
+    </section>
   </div>
 </div>
 
 <style>
   .settings-page {
     min-height: 100vh;
-    background: #f9fafb;
-    padding: 2rem;
-  }
-  
-  .settings-container {
+    background: var(--bg-tertiary);
+    padding: 3rem 4rem;
     max-width: 800px;
     margin: 0 auto;
-    background: white;
-    border-radius: 0.5rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
   }
-  
-  .settings-header {
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+
+  .page-header {
+    margin-bottom: 3rem;
   }
-  
-  .settings-header h1 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #111827;
+
+  .page-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.5rem;
+  }
+
+  .page-header p {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
     margin: 0;
   }
-  
-  .back-button {
-    padding: 0.5rem 1rem;
-    background: transparent;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    color: #6b7280;
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-  }
-  
-  .back-button:hover {
-    background: #f3f4f6;
-    border-color: #3b82f6;
-    color: #3b82f6;
-  }
-  
+
   .settings-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
     padding: 2rem;
   }
-  
+
   .settings-section {
     margin-bottom: 2rem;
-    padding-bottom: 2rem;
-    border-bottom: 1px solid #e5e7eb;
   }
-  
+
   .settings-section:last-child {
-    border-bottom: none;
     margin-bottom: 0;
-    padding-bottom: 0;
   }
-  
+
   .settings-section h2 {
-    font-size: 1.25rem;
+    font-size: 1.5rem;
     font-weight: 600;
-    color: #111827;
-    margin: 0 0 1rem 0;
+    color: var(--text-primary);
+    margin: 0 0 1.5rem;
   }
-  
-  .section-description {
-    color: #6b7280;
-    margin-bottom: 1rem;
+
+  .form-group {
+    margin-bottom: 1.5rem;
   }
-  
-  .status-grid {
-    display: grid;
-    gap: 0.75rem;
-  }
-  
-  .status-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    background: #f9fafb;
-    border-radius: 0.375rem;
-  }
-  
-  .status-label {
-    font-weight: 500;
-    color: #374151;
-  }
-  
-  .status-value {
-    color: #6b7280;
-  }
-  
-  .status-value.success {
-    color: #059669;
-    font-weight: 500;
-  }
-  
-  .status-value.warning {
-    color: #d97706;
-    font-weight: 500;
-  }
-  
-  .status-value.mono {
-    font-family: 'Monaco', 'Menlo', monospace;
+
+  .form-group label {
+    display: block;
     font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
   }
-  
-  .feature-list {
-    list-style: none;
-    padding: 0;
-    margin: 1rem 0;
-  }
-  
-  .feature-list li {
-    padding: 0.5rem 0;
-    color: #374151;
-  }
-  
-  .email-login-form {
-    display: flex;
-    gap: 0.75rem;
-    margin: 1.5rem 0;
-  }
-  
-  .email-input {
-    flex: 1;
+
+  .input-field {
+    width: 100%;
     padding: 0.75rem 1rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.375rem;
+    background: var(--bg-input);
+    border: 2px solid var(--border-input);
+    border-radius: 0.5rem;
     font-size: 1rem;
+    color: var(--text-primary);
     transition: all 0.2s;
   }
-  
-  .email-input:focus {
+
+  .input-field:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--border-input-focus);
+    box-shadow: 0 0 0 4px var(--accent-glow);
   }
-  
-  .email-input:disabled {
-    background: #f3f4f6;
-    cursor: not-allowed;
+
+  .input-field::placeholder {
+    color: var(--text-tertiary);
   }
-  
-  .login-button {
-    padding: 0.75rem 1.5rem;
-    background: #3b82f6;
-    color: white;
+
+  .save-btn {
+    padding: 0.75rem 2rem;
+    background: var(--accent-color);
+    color: #000;
     border: none;
-    border-radius: 0.375rem;
-    font-weight: 500;
+    border-radius: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
+    box-shadow: 0 0 15px var(--accent-glow);
   }
-  
-  .login-button:hover:not(:disabled) {
-    background: #2563eb;
+
+  .save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px var(--accent-glow);
   }
-  
-  .login-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+
+  .save-btn:active {
+    transform: translateY(0);
   }
-  
-  .spinner-small {
-    display: inline-block;
-    width: 1rem;
-    height: 1rem;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-  
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-  
-  .info-box {
-    padding: 1rem;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 0.375rem;
-    color: #1e40af;
-    font-size: 0.875rem;
-    margin-top: 1rem;
-  }
-  
-  .warning-box {
-    padding: 1rem;
-    background: #fef3c7;
-    border: 1px solid #fcd34d;
-    border-radius: 0.375rem;
-    color: #92400e;
-    font-size: 0.875rem;
-    margin-top: 1rem;
-  }
-  
-  .success-message {
-    color: #059669;
-    font-weight: 500;
-    padding: 1rem;
-    background: #d1fae5;
-    border-radius: 0.375rem;
-  }
-  
-  a {
-    color: #3b82f6;
-    text-decoration: none;
-  }
-  
-  a:hover {
-    text-decoration: underline;
-  }
-  
-  @media (max-width: 640px) {
+
+  @media (max-width: 768px) {
     .settings-page {
-      padding: 1rem;
+      padding: 2rem 1.5rem;
     }
-    
+
     .settings-content {
-      padding: 1rem;
+      padding: 1.5rem;
     }
-    
-    .email-login-form {
-      flex-direction: column;
-    }
-    
-    .login-button {
-      width: 100%;
-      justify-content: center;
+
+    .page-header h1 {
+      font-size: 2rem;
     }
   }
 </style>

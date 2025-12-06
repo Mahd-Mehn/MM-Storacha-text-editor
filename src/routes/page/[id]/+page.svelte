@@ -40,14 +40,16 @@
   {#if currentPage}
     <div class="page-header">
       <div class="page-icon-large">{currentPage.icon}</div>
-      <h1
-        class="page-title-edit"
-        contenteditable="true"
-        on:blur={handleTitleUpdate}
-        on:keydown={(e) => e.key === "Enter" && e.preventDefault()}
-      >
-        {currentPage.title}
-      </h1>
+      {#key pageId}
+        <h1
+          class="page-title-edit"
+          contenteditable="true"
+          on:blur={handleTitleUpdate}
+          on:keydown={(e) => e.key === "Enter" && e.preventDefault()}
+        >
+          {currentPage.title}
+        </h1>
+      {/key}
     </div>
 
     <div class="page-content">
