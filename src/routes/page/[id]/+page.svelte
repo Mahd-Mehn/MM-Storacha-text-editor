@@ -51,11 +51,13 @@
     </div>
 
     <div class="page-content">
-      <SimpleEditor
-        content={pageContent}
-        placeholder="Start writing..."
-        onUpdate={handleContentUpdate}
-      />
+      {#key pageId}
+        <SimpleEditor
+          content={pageContent}
+          placeholder="Start writing..."
+          onUpdate={handleContentUpdate}
+        />
+      {/key}
     </div>
   {:else}
     <div class="page-not-found">
