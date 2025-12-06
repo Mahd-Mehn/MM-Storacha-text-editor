@@ -4,6 +4,7 @@
   import WorkspaceTree from "./WorkspaceTree.svelte";
   import ThemeToggle from "$lib/components/ThemeToggle.svelte";
   import { workspaceStore } from "$lib/stores/workspace";
+  import { userStore } from "$lib/stores/user";
 
   export let collapsed = false;
 
@@ -178,6 +179,31 @@
           </svg>
           <span>Calendar</span>
         </a>
+
+        <a href="/settings" class="nav-item">
+          <svg
+            class="nav-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+          >
+            <circle
+              cx="9"
+              cy="9"
+              r="2"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="M9 1v2M9 15v2M17 9h-2M3 9H1M14.5 3.5l-1.4 1.4M4.9 13.1l-1.4 1.4M14.5 14.5l-1.4-1.4M4.9 4.9L3.5 3.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>Settings</span>
+        </a>
       </nav>
     </div>
 
@@ -203,13 +229,14 @@
   <!-- User Profile -->
   <div class="user-profile">
     <img
-      src="https://api.dicebear.com/7.x/avataaars/svg?seed=user"
-      alt="User"
+      src={$userStore.avatar ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${$userStore.email}`}
+      alt={$userStore.name}
       class="user-avatar"
     />
     <div class="user-info">
-      <div class="user-name">Your Name</div>
-      <div class="user-email">you@example.com</div>
+      <div class="user-name">{$userStore.name}</div>
+      <div class="user-email">{$userStore.email}</div>
     </div>
     <ThemeToggle />
     <button class="user-menu-btn" title="User menu">
