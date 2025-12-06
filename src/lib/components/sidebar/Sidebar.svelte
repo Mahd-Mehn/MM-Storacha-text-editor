@@ -23,6 +23,15 @@
     // TODO: Implement search
     console.log("Search:", searchQuery);
   }
+
+  // Update body class for sidebar state
+  $: if (typeof document !== "undefined") {
+    if (collapsed) {
+      document.body.classList.add("sidebar-collapsed");
+    } else {
+      document.body.classList.remove("sidebar-collapsed");
+    }
+  }
 </script>
 
 <aside class="sidebar" class:collapsed>
@@ -277,12 +286,17 @@
     border-right: 1px solid var(--border-color, #e5e7eb);
     display: flex;
     flex-direction: column;
-    transition: width 0.2s ease;
-    z-index: 100;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    overflow-x: hidden;
   }
 
   .sidebar.collapsed {
-    width: 60px;
+    width: 70px;
+  }
+
+  .sidebar.collapsed .workspace-icon {
+    margin: 0 auto;
   }
 
   .sidebar.collapsed .workspace-info,
@@ -290,10 +304,44 @@
   .sidebar.collapsed .chevron,
   .sidebar.collapsed .search-box input,
   .sidebar.collapsed .shortcut,
-  .sidebar.collapsed .section-header,
+  .sidebar.collapsed .section-header span,
   .sidebar.collapsed .nav-item span,
-  .sidebar.collapsed .user-info {
+  .sidebar.collapsed .user-info,
+  .sidebar.collapsed .add-button {
     display: none;
+  }
+
+  .sidebar.collapsed .workspace-selector {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar.collapsed .search-container {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .sidebar.collapsed .search-box {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar.collapsed .nav-items {
+    padding: 0 0.25rem;
+  }
+
+  .sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar.collapsed .user-profile {
+    justify-content: center;
+    padding: 1rem 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .sidebar.collapsed .section-header {
+    justify-content: center;
   }
 
   /* Workspace Header */
@@ -591,5 +639,33 @@
 
   .nav-sections::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary, #9ca3af);
+  }
+
+  /* Mobile Responsive */
+  @media (max-width: 768px) {
+    .sidebar {
+      transform: translateX(-100%);
+    }
+
+    .sidebar:not(.collapsed) {
+      transform: translateX(0);
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .sidebar-toggle {
+      display: flex;
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      right: auto;
+      z-index: 1001;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
+    }
+
+    .sidebar:not(.collapsed) + .sidebar-toggle {
+      left: 270px;
+    }
   }
 </style>
