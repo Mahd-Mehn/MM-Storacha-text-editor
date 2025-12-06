@@ -255,13 +255,78 @@
 {/if}
 
 <style>
+  :global(:root) {
+    /* Light theme (default) */
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7f7f7;
+    --bg-tertiary: #f3f4f6;
+    --bg-hover: rgba(0, 0, 0, 0.05);
+    --bg-active: rgba(0, 255, 67, 0.1);
+    --bg-card: #ffffff;
+    --bg-input: #ffffff;
+
+    --text-primary: #1a1a1a;
+    --text-secondary: #6b7280;
+    --text-tertiary: #9ca3af;
+
+    --border-color: #e5e7eb;
+    --border-input: #d1d5db;
+    --border-input-focus: #00ff43;
+
+    --accent-color: #00ff43;
+    --accent-hover: #00dd3a;
+    --accent-glow: rgba(0, 255, 67, 0.3);
+
+    --gray-dark: #484c51;
+    --gray-light: #c2c4c8;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+    --shadow-glow: 0 0 20px rgba(0, 255, 67, 0.2);
+  }
+
+  :global([data-theme="dark"]) {
+    /* Dark theme */
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2a2a2a;
+    --bg-tertiary: #333333;
+    --bg-hover: rgba(255, 255, 255, 0.08);
+    --bg-active: rgba(0, 255, 67, 0.15);
+    --bg-card: #252525;
+    --bg-input: #2a2a2a;
+
+    --text-primary: #f9fafb;
+    --text-secondary: #c2c4c8;
+    --text-tertiary: #9ca3af;
+
+    --border-color: #3d3d3d;
+    --border-input: #484c51;
+    --border-input-focus: #00ff43;
+
+    --accent-color: #00ff43;
+    --accent-hover: #00dd3a;
+    --accent-glow: rgba(0, 255, 67, 0.4);
+
+    --gray-dark: #484c51;
+    --gray-light: #c2c4c8;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.7);
+    --shadow-glow: 0 0 25px rgba(0, 255, 67, 0.3);
+  }
+
   :global(body) {
     margin: 0;
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
       Ubuntu, Cantarell, sans-serif;
-    background: #f9fafb;
-    color: #111827;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    transition:
+      background-color 0.2s,
+      color 0.2s;
   }
 
   :global(*) {
@@ -326,8 +391,8 @@
 
   .retry-button {
     padding: 0.75rem 2rem;
-    background: white;
-    color: #667eea;
+    background: var(--bg-primary);
+    color: var(--accent-color);
     border: none;
     border-radius: 0.5rem;
     font-size: 1rem;
@@ -353,6 +418,7 @@
     flex-direction: column;
     min-width: 0;
     overflow: hidden;
+    margin-left: 260px;
   }
 
   .email-banner {
@@ -390,8 +456,8 @@
 
   .banner-button {
     padding: 0.625rem 1.5rem;
-    background: white;
-    color: #667eea;
+    background: var(--bg-primary);
+    color: var(--accent-color);
     border: none;
     border-radius: 0.5rem;
     font-size: 0.875rem;
@@ -427,8 +493,8 @@
     align-items: center;
     gap: 1rem;
     padding: 0.5rem 1rem;
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 100;

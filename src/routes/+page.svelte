@@ -11,7 +11,6 @@
   import { versionHistoryService } from "$lib/services/version-history.js";
   import { notificationService } from "$lib/services/notification";
   import { errorHandler } from "$lib/services/error-handler";
-  import { autoMigrate } from "$lib/services/storage-migration";
   import type { Note } from "$lib/types";
 
   // State
@@ -37,7 +36,7 @@
     if (noteId && currentNote && noteId !== currentNote.id) {
       loadNoteById(noteId);
     }
-  });
+  }
 
   async function loadNoteById(noteId: string) {
     try {
@@ -65,16 +64,6 @@
 
   async function initializeEditor() {
     try {
-      // Check if storage needs migration (clears old incompatible data)
-      const didMigrate = await autoMigrate();
-      if (didMigrate) {
-        notificationService.info(
-          "Storage Updated",
-          "Your storage format was updated. Previous notes were cleared due to compatibility changes.",
-          5000
-        );
-      }
-
       // Initialize note manager
       await noteManager.initialize();
 

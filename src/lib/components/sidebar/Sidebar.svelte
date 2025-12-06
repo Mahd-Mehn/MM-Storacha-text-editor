@@ -241,6 +241,9 @@
 
 <style>
   .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
     width: 260px;
     height: 100vh;
     background: var(--bg-secondary, #f7f7f7);
@@ -248,7 +251,7 @@
     display: flex;
     flex-direction: column;
     transition: width 0.2s ease;
-    position: relative;
+    z-index: 100;
   }
 
   .sidebar.collapsed {
