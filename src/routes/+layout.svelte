@@ -1,394 +1,441 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import favicon from '$lib/assets/favicon.svg';
-	import ToastNotification from '$lib/components/ToastNotification.svelte';
-	import ConnectionStatusIndicator from '$lib/components/ConnectionStatusIndicator.svelte';
-	import SyncStatusIndicator from '$lib/components/SyncStatusIndicator.svelte';
-	import EmailLoginDialog from '$lib/components/EmailLoginDialog.svelte';
-	import { authService, spaceService, storachaClient, offlineDetectionService, offlineSyncManager } from '$lib/services';
-	import { errorHandler } from '$lib/services/error-handler';
-	import { notificationService } from '$lib/services/notification';
+  import { onMount } from "svelte";
+  import favicon from "$lib/assets/favicon.svg";
+  import ToastNotification from "$lib/components/ToastNotification.svelte";
+  import ConnectionStatusIndicator from "$lib/components/ConnectionStatusIndicator.svelte";
+  import SyncStatusIndicator from "$lib/components/SyncStatusIndicator.svelte";
+  import EmailLoginDialog from "$lib/components/EmailLoginDialog.svelte";
+  import Sidebar from "$lib/components/sidebar/Sidebar.svelte";
+  import {
+    authService,
+    spaceService,
+    storachaClient,
+    offlineDetectionService,
+    offlineSyncManager,
+  } from "$lib/services";
+  import { errorHandler } from "$lib/services/error-handler";
+  import { notificationService } from "$lib/services/notification";
 
-	let { children } = $props();
+  let { children } = $props();
 
-	let isInitializing = $state(true);
-	let initializationError = $state<string | null>(null);
-	let isFirstTimeUser = $state(false);
-	let showEmailLogin = $state(false);
-	let needsEmailLogin = $state(false);
+  let isInitializing = $state(true);
+  let initializationError = $state<string | null>(null);
+  let isFirstTimeUser = $state(false);
+  let showEmailLogin = $state(false);
+  let needsEmailLogin = $state(false);
 
-	onMount(async () => {
-		await initializeApplication();
-	});
+  onMount(async () => {
+    await initializeApplication();
+  });
 
-	async function initializeApplication() {
-		try {
-			isInitializing = true;
-			initializationError = null;
+  async function initializeApplication() {
+    try {
+      isInitializing = true;
+      initializationError = null;
 
-			// Show loading notification
-			const loadingNotif = notificationService.loading('Initializing application', 'Setting up your secure environment...');
+      // Show loading notification
+      const loadingNotif = notificationService.loading(
+        "Initializing application",
+        "Setting up your secure environment..."
+      );
 
-			// Initialize offline detection first
-			offlineDetectionService.initialize();
+      // Initialize offline detection first
+      offlineDetectionService.initialize();
 
-			// Initialize authentication and identity
-			await errorHandler.withRetry(
-				async () => {
-					await authService.initialize();
-				},
-				{ maxRetries: 3, baseDelay: 1000, maxDelay: 5000, backoffMultiplier: 2 },
-				{ operation: 'auth_initialization' }
-			);
+      // Initialize authentication and identity
+      await errorHandler.withRetry(
+        async () => {
+          await authService.initialize();
+        },
+        {
+          maxRetries: 3,
+          baseDelay: 1000,
+          maxDelay: 5000,
+          backoffMultiplier: 2,
+        },
+        { operation: "auth_initialization" }
+      );
 
-			// Check if this is first time user
-			const authState = authService.getAuthState();
-			isFirstTimeUser = !authState.isAuthenticated;
+      // Check if this is first time user
+      const authState = authService.getAuthState();
+      isFirstTimeUser = !authState.isAuthenticated;
 
-			// Check if user needs to login with email for cloud storage
-			const accountStatus = await authService.checkAccountStatus();
-			needsEmailLogin = !accountStatus.hasAccount;
+      // Check if user needs to login with email for cloud storage
+      const accountStatus = await authService.checkAccountStatus();
+      needsEmailLogin = !accountStatus.hasAccount;
 
-			// Initialize space management
-			if (authState.isAuthenticated) {
-				await errorHandler.withRetry(
-					async () => {
-						await spaceService.initialize();
-					},
-					{ maxRetries: 2, baseDelay: 1000, maxDelay: 3000, backoffMultiplier: 2 },
-					{ operation: 'space_initialization' }
-				);
+      // Initialize space management
+      if (authState.isAuthenticated) {
+        await errorHandler.withRetry(
+          async () => {
+            await spaceService.initialize();
+          },
+          {
+            maxRetries: 2,
+            baseDelay: 1000,
+            maxDelay: 3000,
+            backoffMultiplier: 2,
+          },
+          { operation: "space_initialization" }
+        );
 
-				// Initialize Storacha client if online
-				if (offlineDetectionService.isOnline()) {
-					try {
-						await storachaClient.initialize();
-					} catch (error) {
-						console.warn('Storacha client initialization failed, will work in offline mode:', error);
-					}
-				}
+        // Initialize Storacha client if online
+        if (offlineDetectionService.isOnline()) {
+          try {
+            await storachaClient.initialize();
+          } catch (error) {
+            console.warn(
+              "Storacha client initialization failed, will work in offline mode:",
+              error
+            );
+          }
+        }
 
-				// Initialize offline sync manager
-				await offlineSyncManager.initialize();
-			}
+        // Initialize offline sync manager
+        await offlineSyncManager.initialize();
+      }
 
-			// Setup error handler recovery strategies
-			setupErrorRecovery();
+      // Setup error handler recovery strategies
+      setupErrorRecovery();
 
-			// Dismiss loading notification and show success
-			notificationService.dismiss(loadingNotif);
-			notificationService.success('Ready to go!', 'Your notes are secure and ready to use');
+      // Dismiss loading notification and show success
+      notificationService.dismiss(loadingNotif);
+      notificationService.success(
+        "Ready to go!",
+        "Your notes are secure and ready to use"
+      );
 
-			// Show onboarding message for first-time users
-			if (isFirstTimeUser) {
-				setTimeout(() => {
-					notificationService.info(
-						'Welcome to Storacha Notes!',
-						'Your identity has been created automatically. All your notes are encrypted and stored securely.',
-						8000
-					);
-				}, 1000);
-			}
-		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
-			initializationError = errorMessage;
-			
-			notificationService.error(
-				'Initialization Failed',
-				errorMessage,
-				{
-					label: 'Retry',
-					callback: () => {
-						window.location.reload();
-					}
-				}
-			);
-			
-			console.error('Application initialization failed:', error);
-		} finally {
-			isInitializing = false;
-		}
-	}
+      // Show onboarding message for first-time users
+      if (isFirstTimeUser) {
+        setTimeout(() => {
+          notificationService.info(
+            "Welcome to Storacha Notes!",
+            "Your identity has been created automatically. All your notes are encrypted and stored securely.",
+            8000
+          );
+        }, 1000);
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown initialization error";
+      initializationError = errorMessage;
 
-	function setupErrorRecovery() {
-		// Network error recovery
-		errorHandler.registerRecoveryHandler('network', async (error) => {
-			// Wait for connection to be restored
-			if (offlineDetectionService.isOnline()) {
-				notificationService.info('Connection restored', 'Syncing pending changes...');
-				await offlineSyncManager.processQueue();
-				return true;
-			}
-			return false;
-		});
+      notificationService.error("Initialization Failed", errorMessage, {
+        label: "Retry",
+        callback: () => {
+          window.location.reload();
+        },
+      });
 
-		// Storage error recovery
-		errorHandler.registerRecoveryHandler('storage', async (error) => {
-			// Attempt to clear space and retry
-			if (error.message.includes('quota')) {
-				notificationService.warning(
-					'Storage quota exceeded',
-					'Please free up some space or delete old notes'
-				);
-			}
-			return false;
-		});
+      console.error("Application initialization failed:", error);
+    } finally {
+      isInitializing = false;
+    }
+  }
 
-		// Listen to all errors and show notifications
-		errorHandler.onError((error) => {
-			if (error.severity === 'critical' || error.severity === 'high') {
-				notificationService.error(
-					error.message,
-					error.context ? JSON.stringify(error.context) : undefined
-				);
-			} else if (error.severity === 'medium') {
-				notificationService.warning(error.message);
-			}
-		});
-	}
+  function setupErrorRecovery() {
+    // Network error recovery
+    errorHandler.registerRecoveryHandler("network", async (error) => {
+      // Wait for connection to be restored
+      if (offlineDetectionService.isOnline()) {
+        notificationService.info(
+          "Connection restored",
+          "Syncing pending changes..."
+        );
+        await offlineSyncManager.processQueue();
+        return true;
+      }
+      return false;
+    });
+
+    // Storage error recovery
+    errorHandler.registerRecoveryHandler("storage", async (error) => {
+      // Attempt to clear space and retry
+      if (error.message.includes("quota")) {
+        notificationService.warning(
+          "Storage quota exceeded",
+          "Please free up some space or delete old notes"
+        );
+      }
+      return false;
+    });
+
+    // Listen to all errors and show notifications
+    errorHandler.onError((error) => {
+      if (error.severity === "critical" || error.severity === "high") {
+        notificationService.error(
+          error.message,
+          error.context ? JSON.stringify(error.context) : undefined
+        );
+      } else if (error.severity === "medium") {
+        notificationService.warning(error.message);
+      }
+    });
+  }
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
-	<title>Storacha Notes - Privacy-First Note Taking</title>
-	<meta name="description" content="Privacy-first, offline-capable note-taking with decentralized storage" />
+  <link rel="icon" href={favicon} />
+  <title>Storacha Notes - Privacy-First Note Taking</title>
+  <meta
+    name="description"
+    content="Privacy-first, offline-capable note-taking with decentralized storage"
+  />
 </svelte:head>
 
 {#if isInitializing}
-	<div class="initialization-screen">
-		<div class="init-content">
-			<div class="spinner"></div>
-			<h1>Storacha Notes</h1>
-			<p>Setting up your secure environment...</p>
-		</div>
-	</div>
+  <div class="initialization-screen">
+    <div class="init-content">
+      <div class="spinner"></div>
+      <h1>Storacha Notes</h1>
+      <p>Setting up your secure environment...</p>
+    </div>
+  </div>
 {:else if initializationError}
-	<div class="error-screen">
-		<div class="error-content">
-			<div class="error-icon">⚠</div>
-			<h1>Initialization Failed</h1>
-			<p class="error-message">{initializationError}</p>
-			<button onclick={() => window.location.reload()} class="retry-button">
-				Retry
-			</button>
-		</div>
-	</div>
+  <div class="error-screen">
+    <div class="error-content">
+      <div class="error-icon">⚠</div>
+      <h1>Initialization Failed</h1>
+      <p class="error-message">{initializationError}</p>
+      <button onclick={() => window.location.reload()} class="retry-button">
+        Retry
+      </button>
+    </div>
+  </div>
 {:else}
-	<div class="app-container">
-		<!-- Email login banner -->
-		{#if needsEmailLogin && !showEmailLogin}
-			<div class="email-banner">
-				<div class="banner-content">
-					<span class="banner-icon">📧</span>
-					<div class="banner-text">
-						<strong>Enable Cloud Storage</strong>
-						<p>Login with email to upload and share notes via IPFS</p>
-					</div>
-				</div>
-				<button class="banner-button" onclick={() => showEmailLogin = true}>
-					Get Started
-				</button>
-			</div>
-		{/if}
+  <div class="app-container">
+    <Sidebar />
+    <div class="main-content-wrapper">
+      <!-- Email login banner -->
+      {#if needsEmailLogin && !showEmailLogin}
+        <div class="email-banner">
+          <div class="banner-content">
+            <span class="banner-icon">📧</span>
+            <div class="banner-text">
+              <strong>Enable Cloud Storage</strong>
+              <p>Login with email to upload and share notes via IPFS</p>
+            </div>
+          </div>
+          <button class="banner-button" onclick={() => (showEmailLogin = true)}>
+            Get Started
+          </button>
+        </div>
+      {/if}
 
-		<!-- Status indicators -->
-		<div class="status-bar">
-			<ConnectionStatusIndicator />
-			<SyncStatusIndicator />
-		</div>
+      <!-- Status indicators -->
+      <div class="status-bar">
+        <ConnectionStatusIndicator />
+        <SyncStatusIndicator />
+      </div>
 
-		<!-- Main content -->
-		<main class="app-main">
-			{@render children?.()}
-		</main>
+      <!-- Main content -->
+      <main class="app-main">
+        {@render children?.()}
+      </main>
 
-		<!-- Toast notifications -->
-		<ToastNotification />
+      <!-- Toast notifications -->
+      <ToastNotification />
 
-		<!-- Email login dialog -->
-		{#if showEmailLogin}
-			<EmailLoginDialog 
-				onClose={() => showEmailLogin = false}
-				onSuccess={() => {
-					needsEmailLogin = false;
-					showEmailLogin = false;
-					notificationService.success('Cloud storage enabled!', 'You can now upload and share notes');
-				}}
-			/>
-		{/if}
-	</div>
+      <!-- Email login dialog -->
+      {#if showEmailLogin}
+        <EmailLoginDialog
+          onClose={() => (showEmailLogin = false)}
+          onSuccess={() => {
+            needsEmailLogin = false;
+            showEmailLogin = false;
+            notificationService.success(
+              "Cloud storage enabled!",
+              "You can now upload and share notes"
+            );
+          }}
+        />
+      {/if}
+    </div>
+  </div>
 {/if}
 
 <style>
-	:global(body) {
-		margin: 0;
-		padding: 0;
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-		background: #f9fafb;
-		color: #111827;
-	}
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, Cantarell, sans-serif;
+    background: #f9fafb;
+    color: #111827;
+  }
 
-	:global(*) {
-		box-sizing: border-box;
-	}
+  :global(*) {
+    box-sizing: border-box;
+  }
 
-	.initialization-screen,
-	.error-screen {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		min-height: 100vh;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-	}
+  .initialization-screen,
+  .error-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
 
-	.init-content,
-	.error-content {
-		text-align: center;
-		color: white;
-		padding: 2rem;
-	}
+  .init-content,
+  .error-content {
+    text-align: center;
+    color: white;
+    padding: 2rem;
+  }
 
-	.spinner {
-		width: 3rem;
-		height: 3rem;
-		border: 4px solid rgba(255, 255, 255, 0.3);
-		border-top-color: white;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-		margin: 0 auto 2rem;
-	}
+  .spinner {
+    width: 3rem;
+    height: 3rem;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 2rem;
+  }
 
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
-	.init-content h1,
-	.error-content h1 {
-		font-size: 2rem;
-		margin-bottom: 0.5rem;
-		font-weight: 700;
-	}
+  .init-content h1,
+  .error-content h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+  }
 
-	.init-content p {
-		font-size: 1.125rem;
-		opacity: 0.9;
-	}
+  .init-content p {
+    font-size: 1.125rem;
+    opacity: 0.9;
+  }
 
-	.error-icon {
-		font-size: 4rem;
-		margin-bottom: 1rem;
-	}
+  .error-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+  }
 
-	.error-message {
-		font-size: 1rem;
-		opacity: 0.9;
-		margin-bottom: 2rem;
-		max-width: 500px;
-	}
+  .error-message {
+    font-size: 1rem;
+    opacity: 0.9;
+    margin-bottom: 2rem;
+    max-width: 500px;
+  }
 
-	.retry-button {
-		padding: 0.75rem 2rem;
-		background: white;
-		color: #667eea;
-		border: none;
-		border-radius: 0.5rem;
-		font-size: 1rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: transform 0.2s;
-	}
+  .retry-button {
+    padding: 0.75rem 2rem;
+    background: white;
+    color: #667eea;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
 
-	.retry-button:hover {
-		transform: scale(1.05);
-	}
+  .retry-button:hover {
+    transform: scale(1.05);
+  }
 
-	.app-container {
-		display: flex;
-		flex-direction: column;
-		min-height: 100vh;
-	}
+  .app-container {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+    overflow: hidden;
+  }
 
-	.email-banner {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 1rem 1.5rem;
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-		color: white;
-		gap: 1rem;
-	}
+  .main-content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
 
-	.banner-content {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		flex: 1;
-	}
+  .email-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    gap: 1rem;
+  }
 
-	.banner-icon {
-		font-size: 2rem;
-	}
+  .banner-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+  }
 
-	.banner-text strong {
-		display: block;
-		font-size: 1rem;
-		margin-bottom: 0.25rem;
-	}
+  .banner-icon {
+    font-size: 2rem;
+  }
 
-	.banner-text p {
-		margin: 0;
-		font-size: 0.875rem;
-		opacity: 0.9;
-	}
+  .banner-text strong {
+    display: block;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+  }
 
-	.banner-button {
-		padding: 0.625rem 1.5rem;
-		background: white;
-		color: #667eea;
-		border: none;
-		border-radius: 0.5rem;
-		font-size: 0.875rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-		white-space: nowrap;
-	}
+  .banner-text p {
+    margin: 0;
+    font-size: 0.875rem;
+    opacity: 0.9;
+  }
 
-	.banner-button:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-	}
+  .banner-button {
+    padding: 0.625rem 1.5rem;
+    background: white;
+    color: #667eea;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
 
-	@media (max-width: 768px) {
-		.email-banner {
-			flex-direction: column;
-			text-align: center;
-		}
+  .banner-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  }
 
-		.banner-content {
-			flex-direction: column;
-		}
+  @media (max-width: 768px) {
+    .email-banner {
+      flex-direction: column;
+      text-align: center;
+    }
 
-		.banner-button {
-			width: 100%;
-		}
-	}
+    .banner-content {
+      flex-direction: column;
+    }
 
-	.status-bar {
-		display: flex;
-		justify-content: flex-end;
-		align-items: center;
-		gap: 1rem;
-		padding: 0.5rem 1rem;
-		background: white;
-		border-bottom: 1px solid #e5e7eb;
-		position: sticky;
-		top: 0;
-		z-index: 100;
-	}
+    .banner-button {
+      width: 100%;
+    }
+  }
 
-	.app-main {
-		flex: 1;
-		overflow: auto;
-	}
+  .status-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .app-main {
+    flex: 1;
+    overflow: auto;
+  }
 </style>

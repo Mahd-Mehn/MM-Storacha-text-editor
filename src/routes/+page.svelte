@@ -1,37 +1,38 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
   import { page } from "$app/stores";
-  import { RichTextEditor } from "$lib";
-  import { noteManager, yjsDocumentManager } from "$lib/services";
-  import { notificationService } from "$lib/services/notification";
-  import { errorHandler } from "$lib/services/error-handler";
-  import { autoMigrate } from "$lib/utils/storage-migration";
-  import ShareNoteDialog from "$lib/components/ShareNoteDialog.svelte";
+  import { goto } from "$app/navigation";
+  import RichTextEditor from "$lib/components/RichTextEditor.svelte";
   import VersionHistorySidebar from "$lib/components/VersionHistorySidebar.svelte";
   import VersionDiffViewer from "$lib/components/VersionDiffViewer.svelte";
-  import { versionHistoryService } from "$lib/services";
+  import ShareNoteDialog from "$lib/components/ShareNoteDialog.svelte";
+  import * as Y from "yjs";
+  import { noteManager } from "$lib/services";
+  import { versionHistoryService } from "$lib/services/version-history.js";
+  import { notificationService } from "$lib/services/notification";
+  import { errorHandler } from "$lib/services/error-handler";
+  import { autoMigrate } from "$lib/services/storage-migration";
   import type { Note } from "$lib/types";
-  import type { Doc as YDoc } from "yjs";
 
-  let currentNote: Note | null = $state(null);
-  let yjsDocument: YDoc | null = $state(null);
-  let editorContent = $state("");
-  let noteTitle = $state("Untitled Note");
-  let isSaving = $state(false);
-  let showShareDialog = $state(false);
-  let showVersionHistory = $state(false);
-  let showDiffViewer = $state(false);
-  let compareFromVersion = $state<number | null>(null);
-  let compareToVersion = $state<number | null>(null);
-  let lastSaved = $state<Date | null>(null);
+  // State
+  let currentNote: Note | null = null;
+  let yjsDocument: Y.Doc | null = null;
+  let noteTitle = "";
+  let editorContent = "";
+  let isSaving = false;
+  let lastSaved: Date | null = null;
+  let showVersionHistory = false;
+  let showShareDialog = false;
+  let showDiffViewer = false;
+  let compareFromVersion: number | null = null;
+  let compareToVersion: number | null = null;
 
-  onMount(async () => {
-    await initializeEditor();
+  onMount(() => {
+    initializeEditor();
   });
 
-  // Reactive effect to reload note when URL changes
-  $effect(() => {
+  // Watch for noteId changes in URL
+  $: {
     const noteId = $page.url.searchParams.get("noteId");
     if (noteId && currentNote && noteId !== currentNote.id) {
       loadNoteById(noteId);
