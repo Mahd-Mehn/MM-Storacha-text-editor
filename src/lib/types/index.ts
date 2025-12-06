@@ -317,3 +317,9 @@ export interface NoteManagerInterface {
 
 // Export auth types
 export * from './auth.js'
+
+// Export block types
+export * from './blocks.js'
+
+// Export page and workspace types
+export * from './pages.js'

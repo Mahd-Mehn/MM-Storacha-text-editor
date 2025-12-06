@@ -34,6 +34,12 @@ export { HybridStorageService, hybridStorageService } from './hybrid-storage';
 // Note management service
 export { NoteManager, noteManager } from './note-manager';
 
+// Block management service
+export { BlockManager, blockManager } from './block-manager';
+
+// Page management service
+export { PageManager, pageManager } from './page-manager';
+
 // Error handling service
 export { ErrorHandlerService, errorHandler } from './error-handler';
 
