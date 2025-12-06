@@ -1,10 +1,14 @@
 <script lang="ts">
   import { page } from "$app/stores";
   import { workspaceState } from "$lib/stores/workspace";
-  import RichTextEditor from "$lib/components/RichTextEditor.svelte";
+  import SimpleEditor from "$lib/components/SimpleEditor.svelte";
+  import { browser } from "$app/environment";
 
-  $: pageId = $page.params.id;
+  $: pageId = $page.params.id || "";
   $: currentPage = findPage($workspaceState.workspace.pages, pageId);
+  $: pageContent = browser
+    ? localStorage.getItem(`page-content-${pageId}`) || ""
+    : "";
 
   function findPage(pages: any[], id: string): any | null {
     for (const p of pages) {
@@ -16,19 +20,44 @@
     }
     return null;
   }
+
+  function handleContentUpdate(content: string) {
+    if (browser) {
+      localStorage.setItem(`page-content-${pageId}`, content);
+    }
+  }
+
+  function handleTitleUpdate(e: Event) {
+    const target = e.target as HTMLElement;
+    const newTitle = target.textContent?.trim() || "Untitled";
+    if (newTitle !== currentPage?.title) {
+      workspaceState.renamePage(pageId, newTitle);
+    }
+  }
 </script>
 
 <div class="page-container">
   {#if currentPage}
     <div class="page-header">
       <div class="page-icon-large">{currentPage.icon}</div>
-      <h1 class="page-title-edit" contenteditable="true">
+      <h1
+        class="page-title-edit"
+        contenteditable="true"
+        on:blur={handleTitleUpdate}
+        on:keydown={(e) => e.key === "Enter" && e.preventDefault()}
+      >
         {currentPage.title}
       </h1>
     </div>
 
     <div class="page-content">
-      <RichTextEditor />
+      {#key pageId}
+        <SimpleEditor
+          content={pageContent}
+          placeholder="Start writing..."
+          onUpdate={handleContentUpdate}
+        />
+      {/key}
     </div>
   {:else}
     <div class="page-not-found">
@@ -43,18 +72,29 @@
   .page-container {
     min-height: 100vh;
     background: var(--bg-primary);
-    padding: 3rem 4rem;
-    max-width: 900px;
-    margin: 0 auto;
   }
 
   .page-header {
-    margin-bottom: 2rem;
+    max-width: 750px;
+    margin: 0 auto;
+    padding: 3rem 2rem 1rem;
   }
 
   .page-icon-large {
     font-size: 4rem;
     margin-bottom: 1rem;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .page-title-edit {
@@ -67,20 +107,25 @@
     padding: 0.5rem 0;
     border-radius: 0.5rem;
     transition: all 0.2s;
+    cursor: text;
+    display: inline-block;
+    min-width: 200px;
   }
 
   .page-title-edit:hover {
     background: var(--bg-hover);
     padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   .page-title-edit:focus {
     background: var(--bg-hover);
     padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   .page-content {
-    margin-top: 2rem;
+    animation: fadeIn 0.4s ease-out 0.1s both;
   }
 
   .page-not-found {
@@ -108,12 +153,16 @@
   }
 
   @media (max-width: 768px) {
-    .page-container {
-      padding: 2rem 1.5rem;
+    .page-header {
+      padding: 2rem 1.5rem 1rem;
     }
 
     .page-title-edit {
       font-size: 2rem;
+    }
+
+    .page-icon-large {
+      font-size: 3rem;
     }
   }
 </style>
