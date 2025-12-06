@@ -5,9 +5,10 @@
 	import ConnectionStatusIndicator from '$lib/components/ConnectionStatusIndicator.svelte';
 	import SyncStatusIndicator from '$lib/components/SyncStatusIndicator.svelte';
 	import EmailLoginDialog from '$lib/components/EmailLoginDialog.svelte';
-	import { authService, spaceService, storachaClient, offlineDetectionService, offlineSyncManager } from '$lib/services';
+	import { authService, spaceService, storachaClient, offlineDetectionService, offlineSyncManager, pageManager } from '$lib/services';
 	import { errorHandler } from '$lib/services/error-handler';
 	import { notificationService } from '$lib/services/notification';
+	import Sidebar from '$lib/components/navigation/Sidebar.svelte';
 
 	let { children } = $props();
 
@@ -16,10 +17,23 @@
 	let isFirstTimeUser = $state(false);
 	let showEmailLogin = $state(false);
 	let needsEmailLogin = $state(false);
+	let activePageId = $state<string | null>(null);
 
 	onMount(async () => {
 		await initializeApplication();
 	});
+
+	import { goto } from '$app/navigation';
+
+	function handlePageSelect(event: CustomEvent) {
+		activePageId = event.detail.pageId;
+		goto(`/?pageId=${activePageId}`);
+	}
+
+	function handlePageCreate(event: CustomEvent) {
+		// Logic to create a new page is now handled in Sidebar
+		// But we might want to navigate to it if Sidebar emits select
+	}
 
 	async function initializeApplication() {
 		try {
@@ -70,6 +84,32 @@
 
 				// Initialize offline sync manager
 				await offlineSyncManager.initialize();
+
+				// Initialize page manager and create welcome page if needed
+				await pageManager.initialize();
+				const WORKSPACE_ID = 'default-workspace';
+				const rootPages = pageManager.getRootPages(WORKSPACE_ID);
+				
+				if (rootPages.length === 0) {
+					// Create a welcome page for new users
+					const welcomePage = pageManager.createPage({
+						workspaceId: WORKSPACE_ID,
+						parentId: null,
+						title: 'Welcome to Storacha Notes',
+						icon: { type: 'emoji', value: '👋' }
+					});
+					activePageId = welcomePage.id;
+					goto(`/?pageId=${welcomePage.id}`);
+				} else {
+					// Navigate to the first page if no page is selected
+					const currentPageId = new URL(window.location.href).searchParams.get('pageId');
+					if (!currentPageId) {
+						activePageId = rootPages[0].id;
+						goto(`/?pageId=${rootPages[0].id}`);
+					} else {
+						activePageId = currentPageId;
+					}
+				}
 			}
 
 			// Setup error handler recovery strategies
@@ -197,10 +237,20 @@
 			<SyncStatusIndicator />
 		</div>
 
-		<!-- Main content -->
-		<main class="app-main">
-			{@render children?.()}
-		</main>
+		<!-- App layout with sidebar -->
+		<div class="app-layout">
+			<!-- Sidebar -->
+			<Sidebar 
+				{activePageId}
+				on:select={handlePageSelect}
+				on:create={handlePageCreate}
+			/>
+
+			<!-- Main content -->
+			<main class="app-main">
+				{@render children?.()}
+			</main>
+		</div>
 
 		<!-- Toast notifications -->
 		<ToastNotification />
@@ -387,8 +437,16 @@
 		z-index: 100;
 	}
 
+	.app-layout {
+		display: flex;
+		flex: 1;
+		overflow: hidden;
+		height: calc(100vh - 45px); /* Account for status bar */
+	}
+
 	.app-main {
 		flex: 1;
 		overflow: auto;
+		height: 100%;
 	}
 </style>
