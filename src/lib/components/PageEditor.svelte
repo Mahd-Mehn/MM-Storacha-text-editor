@@ -2,10 +2,20 @@
   import { onMount, onDestroy } from 'svelte';
   import { pageManager } from '$lib/services/page-manager';
   import { blockManager } from '$lib/services/block-manager';
+  import { workspaceState, type Page as WorkspacePage } from '$lib/stores/workspace';
+  import { get } from 'svelte/store';
   import type { Page } from '$lib/types/pages';
-  import type { Block } from '$lib/types/blocks';
+  import type { Block, BlockType } from '$lib/types/blocks';
   import ParagraphBlock from './blocks/ParagraphBlock.svelte';
   import HeadingBlock from './blocks/HeadingBlock.svelte';
+  import TodoBlock from './blocks/TodoBlock.svelte';
+  import ToggleBlock from './blocks/ToggleBlock.svelte';
+  import QuoteBlock from './blocks/QuoteBlock.svelte';
+  import CalloutBlock from './blocks/CalloutBlock.svelte';
+  import CodeBlock from './blocks/CodeBlock.svelte';
+  import DividerBlock from './blocks/DividerBlock.svelte';
+  import BulletListBlock from './blocks/BulletListBlock.svelte';
+  import NumberedListBlock from './blocks/NumberedListBlock.svelte';
   import SlashCommandMenu from './SlashCommandMenu.svelte';
 
   let { pageId } = $props<{ pageId: string }>();
@@ -19,11 +29,135 @@
   let slashMenuPosition = $state({ x: 0, y: 0 });
   let activeBlockId = $state<string | null>(null);
 
+  // Drag & drop state
+  let draggedBlockId = $state<string | null>(null);
+  let dropTargetId = $state<string | null>(null);
+  let dropPosition = $state<'before' | 'after' | null>(null);
+
   // Cleanup on destroy
   onDestroy(() => {
     // Flush any pending saves before unmounting
     blockManager.flushSave();
   });
+
+  // Drag & drop handlers
+  function handleDragStart(e: DragEvent, blockId: string) {
+    draggedBlockId = blockId;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', blockId);
+    }
+    // Add a slight delay to allow drag image to appear
+    setTimeout(() => {
+      const el = document.querySelector(`[data-block-id="${blockId}"]`);
+      if (el) el.classList.add('dragging');
+    }, 0);
+  }
+
+  function handleDragOver(e: DragEvent, blockId: string) {
+    e.preventDefault();
+    if (!draggedBlockId || draggedBlockId === blockId) return;
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    
+    dropTargetId = blockId;
+    dropPosition = e.clientY < midY ? 'before' : 'after';
+    
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    // Only clear if leaving the block entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !e.currentTarget?.contains(relatedTarget)) {
+      dropTargetId = null;
+      dropPosition = null;
+    }
+  }
+
+  function handleDragEnd(e: DragEvent) {
+    const el = document.querySelector(`[data-block-id="${draggedBlockId}"]`);
+    if (el) el.classList.remove('dragging');
+    draggedBlockId = null;
+    dropTargetId = null;
+    dropPosition = null;
+  }
+
+  function handleDrop(e: DragEvent, targetBlockId: string) {
+    e.preventDefault();
+    
+    if (!draggedBlockId || draggedBlockId === targetBlockId) {
+      handleDragEnd(e);
+      return;
+    }
+    
+    // Calculate insert position
+    const targetIndex = blocks.findIndex(b => b.id === targetBlockId);
+    const draggedIndex = blocks.findIndex(b => b.id === draggedBlockId);
+    
+    if (targetIndex === -1 || draggedIndex === -1) {
+      handleDragEnd(e);
+      return;
+    }
+
+    // Determine where to insert
+    const insertAfter = dropPosition === 'after' ? targetBlockId : 
+      (targetIndex > 0 ? blocks[targetIndex - 1].id : null);
+
+    // Move the block
+    blockManager.moveBlock({
+      blockId: draggedBlockId,
+      targetParentId: null,
+      targetPageId: pageId,
+      insertAfter: insertAfter
+    });
+    
+    // Refresh blocks
+    blocks = blockManager.getPageBlocks(pageId);
+    
+    handleDragEnd(e);
+  }
+
+  // Helper to find a page in workspace state tree
+  function findWorkspacePage(pages: WorkspacePage[], id: string): WorkspacePage | null {
+    for (const p of pages) {
+      if (p.id === id) return p;
+      if (p.children && p.children.length > 0) {
+        const found = findWorkspacePage(p.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  // Convert workspace page to Page type for PageEditor
+  function convertWorkspacePage(wp: WorkspacePage): Page {
+    return {
+      id: wp.id,
+      title: wp.title,
+      type: 'page',
+      icon: wp.icon,
+      cover: wp.cover ? { type: 'image', value: wp.cover } : undefined,
+      parentId: wp.parentId ?? null,
+      workspaceId: 'default',
+      childPages: wp.children?.map(c => c.id) || [],
+      blocks: [],
+      metadata: {
+        created: new Date(wp.createdAt),
+        modified: new Date(wp.updatedAt),
+        version: 1,
+        storachaCID: '',
+        shareLinks: [],
+        isDeleted: false,
+        isTemplate: false,
+        isFavorite: false,
+        viewCount: 0
+      }
+    };
+  }
 
   async function loadPageData(id: string) {
     loading = true;
@@ -31,7 +165,19 @@
     await pageManager.initialize();
     await blockManager.initialize();
 
+    // First try pageManager
     page = pageManager.getPage(id);
+    
+    // If not found, check workspaceState
+    if (!page) {
+      const state = get(workspaceState);
+      const workspacePage = findWorkspacePage(state.workspace.pages, id);
+      
+      if (workspacePage) {
+        // Convert and use the workspace page
+        page = convertWorkspacePage(workspacePage);
+      }
+    }
     
     if (page) {
       // Load blocks for the page
@@ -59,10 +205,19 @@
   function updateTitle(e: Event) {
     const target = e.target as HTMLInputElement;
     if (page) {
+      const newTitle = target.value;
+      
+      // Update in pageManager if it exists there
       pageManager.updatePage({
         id: page.id,
-        title: target.value
+        title: newTitle
       });
+      
+      // Also update in workspaceState for compatibility
+      workspaceState.renamePage(page.id, newTitle);
+      
+      // Update local state
+      page = { ...page, title: newTitle };
     }
   }
 
@@ -76,13 +231,27 @@
     blocks = blockManager.getPageBlocks(pageId);
   }
 
-  function addBlock(afterBlockId: string, blockType: string = 'paragraph') {
+  function addBlock(afterBlockId: string, blockType: BlockType = 'paragraph') {
+    // Set default properties based on block type
+    let properties: Record<string, any> = { textContent: [] };
+    
+    if (blockType.startsWith('heading')) {
+      properties.level = parseInt(blockType.replace('heading', '')) || 1;
+    } else if (blockType === 'todo') {
+      properties.checked = false;
+    } else if (blockType === 'toggle') {
+      properties.collapsed = false;
+    } else if (blockType === 'callout') {
+      properties.icon = '💡';
+      properties.calloutColor = '#f3f4f6';
+    } else if (blockType === 'code') {
+      properties.language = 'javascript';
+    }
+
     const newBlock = blockManager.createBlock({
       type: blockType,
       pageId: pageId,
-      properties: blockType.startsWith('heading') 
-        ? { textContent: [], level: parseInt(blockType.replace('heading', '')) || 1 }
-        : { textContent: [] }
+      properties
     });
     
     // Move block to correct position
@@ -139,21 +308,64 @@
     showSlashMenu = true;
   }
 
+  // Helper to get correct index for numbered list items
+  function getNumberedListIndex(allBlocks: Block[], currentIndex: number): number {
+    let count = 1;
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (allBlocks[i].type === 'numberedList') {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }
+
   function handleSlashCommand(command: string) {
     if (!activeBlockId) return;
+    
+    // Build properties for the new block type
+    let properties: Record<string, any> = { textContent: [] };
+    
+    if (command.startsWith('heading')) {
+      properties.level = parseInt(command.replace('heading', '')) || 1;
+    } else if (command === 'todo') {
+      properties.checked = false;
+    } else if (command === 'toggle') {
+      properties.collapsed = false;
+    } else if (command === 'callout') {
+      properties.icon = '💡';
+      properties.calloutColor = '#f3f4f6';
+    } else if (command === 'code') {
+      properties.language = 'javascript';
+    }
     
     // Convert the current block to the selected type
     const currentBlock = blocks.find(b => b.id === activeBlockId);
     if (currentBlock) {
-      // Clear the slash character from the block
+      // Get current text and remove the slash command trigger
+      const currentText = currentBlock.properties.textContent?.map((s: any) => s.text).join('') || '';
+      // Remove the trailing "/" or "/ " from the text
+      const cleanedText = currentText.replace(/\/\s*$/, '').trim();
+      
+      // Update block with new type and cleaned text
       blockManager.updateBlock({
         id: activeBlockId,
-        type: command,
-        properties: command.startsWith('heading') 
-          ? { textContent: [], level: parseInt(command.replace('heading', '')) || 1 }
-          : { textContent: [] }
+        type: command as BlockType,
+        properties: {
+          ...properties,
+          textContent: cleanedText ? [{ text: cleanedText }] : []
+        }
       });
       blocks = blockManager.getPageBlocks(pageId);
+      
+      // Focus the block after update
+      setTimeout(() => {
+        const blockEl = document.querySelector(`[data-block-id="${activeBlockId}"] [contenteditable]`) as HTMLElement;
+        if (blockEl) {
+          blockEl.focus();
+        }
+      }, 50);
     }
     
     showSlashMenu = false;
@@ -204,8 +416,21 @@
 
       <!-- Blocks -->
       <div class="blocks-container">
-        {#each blocks as block (block.id)}
-          <div class="block-wrapper" data-block-id={block.id}>
+        {#each blocks as block, index (block.id)}
+          <div 
+            class="block-wrapper" 
+            class:drop-before={dropTargetId === block.id && dropPosition === 'before'}
+            class:drop-after={dropTargetId === block.id && dropPosition === 'after'}
+            class:is-dragging={draggedBlockId === block.id}
+            data-block-id={block.id}
+            draggable="true"
+            ondragstart={(e) => handleDragStart(e, block.id)}
+            ondragover={(e) => handleDragOver(e, block.id)}
+            ondragleave={handleDragLeave}
+            ondragend={handleDragEnd}
+            ondrop={(e) => handleDrop(e, block.id)}
+            role="listitem"
+          >
             {#if block.type === 'paragraph'}
               <ParagraphBlock 
                 {block} 
@@ -219,6 +444,60 @@
                 {block} 
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id)}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'todo'}
+              <TodoBlock 
+                {block} 
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onEnter={() => addBlock(block.id, 'todo')}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'toggle'}
+              <ToggleBlock 
+                {block} 
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onEnter={() => addBlock(block.id)}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'quote'}
+              <QuoteBlock 
+                {block} 
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onEnter={() => addBlock(block.id)}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'callout'}
+              <CalloutBlock 
+                {block} 
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onEnter={() => addBlock(block.id)}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'code'}
+              <CodeBlock 
+                {block} 
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'divider'}
+              <DividerBlock 
+                {block} 
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'bulletList'}
+              <BulletListBlock 
+                {block} 
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onEnter={() => addBlock(block.id, 'bulletList')}
+                onDelete={() => deleteBlock(block.id)}
+              />
+            {:else if block.type === 'numberedList'}
+              <NumberedListBlock 
+                {block}
+                index={getNumberedListIndex(blocks, index)}
+                onChange={(content) => handleBlockChange(block.id, content)}
+                onEnter={() => addBlock(block.id, 'numberedList')}
                 onDelete={() => deleteBlock(block.id)}
               />
             {:else}
@@ -354,6 +633,40 @@
 
   .block-wrapper {
     position: relative;
+    transition: transform 0.15s, opacity 0.15s;
+  }
+
+  .block-wrapper.is-dragging {
+    opacity: 0.4;
+  }
+
+  .block-wrapper.drop-before::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #3b82f6;
+    border-radius: 2px;
+    z-index: 10;
+  }
+
+  .block-wrapper.drop-after::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #3b82f6;
+    border-radius: 2px;
+    z-index: 10;
+  }
+
+  :global(.block-wrapper.dragging) {
+    opacity: 0.5;
+    cursor: grabbing;
   }
 
   .unknown-block {

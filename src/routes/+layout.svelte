@@ -213,7 +213,7 @@
             <span class="banner-icon">📧</span>
             <div class="banner-text">
               <strong>Enable Cloud Storage</strong>
-              <p>Login with email to upload and share notes via IPFS</p>
+              <p>Login with email to upload and share notes via Storacha</p>
             </div>
           </div>
           <button class="banner-button" onclick={() => (showEmailLogin = true)}>
@@ -419,16 +419,20 @@
     min-width: 0;
     overflow: hidden;
     margin-left: 260px;
+    position: relative;
   }
 
   .email-banner {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
+    padding: 0.875rem 1.5rem;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     gap: 1rem;
+    position: relative;
+    z-index: 50;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   }
 
   .banner-content {
@@ -491,13 +495,14 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 1rem;
-    padding: 0.5rem 1rem;
+    gap: 0.75rem;
+    padding: 0.5rem 1.5rem;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
-    z-index: 100;
+    z-index: 50;
+    min-height: 48px;
   }
 
   .app-main {
