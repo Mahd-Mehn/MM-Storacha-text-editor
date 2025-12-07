@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { pageManager } from '$lib/services/page-manager';
   import { blockManager } from '$lib/services/block-manager';
+  import { workspaceState, type Page as WorkspacePage } from '$lib/stores/workspace';
+  import { get } from 'svelte/store';
   import type { Page } from '$lib/types/pages';
   import type { Block, BlockType } from '$lib/types/blocks';
   import ParagraphBlock from './blocks/ParagraphBlock.svelte';
@@ -119,13 +121,63 @@
     handleDragEnd(e);
   }
 
+  // Helper to find a page in workspace state tree
+  function findWorkspacePage(pages: WorkspacePage[], id: string): WorkspacePage | null {
+    for (const p of pages) {
+      if (p.id === id) return p;
+      if (p.children && p.children.length > 0) {
+        const found = findWorkspacePage(p.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  // Convert workspace page to Page type for PageEditor
+  function convertWorkspacePage(wp: WorkspacePage): Page {
+    return {
+      id: wp.id,
+      title: wp.title,
+      type: 'page',
+      icon: wp.icon,
+      cover: wp.cover ? { type: 'image', value: wp.cover } : undefined,
+      parentId: wp.parentId ?? null,
+      workspaceId: 'default',
+      childPages: wp.children?.map(c => c.id) || [],
+      blocks: [],
+      metadata: {
+        created: new Date(wp.createdAt),
+        modified: new Date(wp.updatedAt),
+        version: 1,
+        storachaCID: '',
+        shareLinks: [],
+        isDeleted: false,
+        isTemplate: false,
+        isFavorite: false,
+        viewCount: 0
+      }
+    };
+  }
+
   async function loadPageData(id: string) {
     loading = true;
     // Ensure services are initialized
     await pageManager.initialize();
     await blockManager.initialize();
 
+    // First try pageManager
     page = pageManager.getPage(id);
+    
+    // If not found, check workspaceState
+    if (!page) {
+      const state = get(workspaceState);
+      const workspacePage = findWorkspacePage(state.workspace.pages, id);
+      
+      if (workspacePage) {
+        // Convert and use the workspace page
+        page = convertWorkspacePage(workspacePage);
+      }
+    }
     
     if (page) {
       // Load blocks for the page
@@ -153,10 +205,19 @@
   function updateTitle(e: Event) {
     const target = e.target as HTMLInputElement;
     if (page) {
+      const newTitle = target.value;
+      
+      // Update in pageManager if it exists there
       pageManager.updatePage({
         id: page.id,
-        title: target.value
+        title: newTitle
       });
+      
+      // Also update in workspaceState for compatibility
+      workspaceState.renamePage(page.id, newTitle);
+      
+      // Update local state
+      page = { ...page, title: newTitle };
     }
   }
 
