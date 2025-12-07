@@ -9,7 +9,7 @@
     onChange,
     onEnter,
     onDelete,
-    onMenu
+    onFocus
   } = $props<{
     block: Block;
     editable?: boolean;
@@ -17,13 +17,12 @@
     onChange?: (content: any) => void;
     onEnter?: () => void;
     onDelete?: () => void;
-    onMenu?: (rect: DOMRect) => void;
+    onFocus?: () => void;
   }>();
 
   let editorElement: HTMLElement;
   let lastBlockId = '';
 
-  // Set initial content when component mounts or block changes
   onMount(() => {
     if (editorElement) {
       const text = block.properties.textContent?.map(s => s.text).join('') || '';
@@ -32,7 +31,6 @@
     }
   });
 
-  // Update content when block.id changes (switching to different block)
   $effect(() => {
     if (editorElement && block.id !== lastBlockId) {
       const text = block.properties.textContent?.map(s => s.text).join('') || '';
@@ -41,20 +39,6 @@
     }
   });
 
-  // Get caret position for slash menu positioning
-  function getCaretCoordinates(): { x: number; y: number } {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      return { x: rect.left, y: rect.bottom + 4 };
-    }
-    // Fallback to element position
-    const rect = editorElement.getBoundingClientRect();
-    return { x: rect.left, y: rect.bottom + 4 };
-  }
-
-  // Handle keyboard navigation
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -65,39 +49,9 @@
     }
   }
 
-  // Handle input to detect slash command
   function handleInput(event: Event) {
     const target = event.target as HTMLElement;
     const text = target.innerText;
-    
-    // Check if text ends with "/" (user just typed a slash)
-    if (text.endsWith('/')) {
-      const textBeforeSlash = text.slice(0, -1);
-      
-      // Trigger slash menu if slash is at start or after whitespace/newline
-      if (textBeforeSlash === '' || /\s$/.test(textBeforeSlash)) {
-        // Get caret position for menu
-        const coords = getCaretCoordinates();
-        
-        setTimeout(() => {
-          const rect = editorElement.getBoundingClientRect();
-          // Create a rect at the caret position
-          const menuRect = {
-            left: coords.x || rect.left,
-            right: coords.x || rect.left,
-            top: coords.y - 20 || rect.top,
-            bottom: coords.y || rect.bottom,
-            x: coords.x || rect.left,
-            y: coords.y - 20 || rect.top,
-            width: 0,
-            height: 20,
-            toJSON: () => ({})
-          } as DOMRect;
-          onMenu?.(menuRect);
-        }, 10);
-      }
-    }
-    
     onChange?.({
       textContent: [{ text }]
     });
@@ -108,19 +62,20 @@
   class="block-wrapper"
   class:selected={isSelected}
 >
-  <!-- Drag Handle (visible on hover) -->
   <div class="drag-handle">
-    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
   </div>
 
-  <!-- Content -->
+  <div class="bullet">•</div>
+
   <div
     bind:this={editorElement}
     contenteditable={editable}
     class="block-content"
-    data-placeholder="Type '/' for commands"
+    data-placeholder="List item"
     oninput={handleInput}
     onkeydown={handleKeydown}
+    onfocus={() => onFocus?.()}
     role="textbox"
     tabindex="0"
   ></div>
@@ -134,6 +89,7 @@
     padding: 0.25rem 0;
     border-radius: 0.25rem;
     transition: background 0.15s;
+    gap: 0.5rem;
   }
 
   .block-wrapper:hover {
@@ -160,27 +116,24 @@
     opacity: 1;
   }
 
-  .drag-handle:hover {
-    background: #f3f4f6;
-    color: #6b7280;
+  .bullet {
+    color: #374151;
+    font-size: 1.25rem;
+    line-height: 1.25;
+    min-width: 1rem;
+    text-align: center;
   }
 
   .block-content {
-    width: 100%;
+    flex: 1;
     outline: none;
-    min-height: 1.5em;
-    font-size: 1rem;
-    line-height: 1.625;
-    color: #374151;
+    min-height: 1.5rem;
+    line-height: 1.5;
   }
 
   .block-content:empty::before {
     content: attr(data-placeholder);
     color: #9ca3af;
     pointer-events: none;
-  }
-
-  .block-content:focus {
-    outline: none;
   }
 </style>

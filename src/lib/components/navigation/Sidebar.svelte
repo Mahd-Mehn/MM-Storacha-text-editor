@@ -1,20 +1,37 @@
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
   import type { Page, Workspace } from '$lib/types/pages';
   import { pageManager } from '$lib/services';
   import PageTreeItem from './PageTreeItem.svelte';
 
-  export let activePageId: string | null = null;
+  let { 
+    pages = [],
+    selectedPageId = null,
+    onpageselect,
+    oncreatepage
+  }: {
+    pages?: Page[];
+    selectedPageId?: string | null;
+    onpageselect?: (event: CustomEvent<{ pageId: string }>) => void;
+    oncreatepage?: (event: CustomEvent<{ parentId?: string }>) => void;
+  } = $props();
   
-  let rootPages: Page[] = [];
-  let expandedPages: Set<string> = new Set();
-  const WORKSPACE_ID = 'default-workspace'; // TODO: Support multiple workspaces
-
-  const dispatch = createEventDispatcher();
+  let rootPages = $state<Page[]>([]);
+  let expandedPages = $state<Set<string>>(new Set());
+  const WORKSPACE_ID = 'default-workspace';
 
   onMount(async () => {
     await pageManager.initialize();
     loadPages();
+  });
+
+  // Sync with external pages prop
+  $effect(() => {
+    if (pages && pages.length > 0) {
+      rootPages = pages.filter(p => !p.parentId);
+    } else {
+      loadPages();
+    }
   });
 
   function loadPages() {
@@ -23,36 +40,35 @@
 
   function handleToggle(event: CustomEvent<{ pageId: string }>) {
     const { pageId } = event.detail;
-    if (expandedPages.has(pageId)) {
-      expandedPages.delete(pageId);
+    const newSet = new Set(expandedPages);
+    if (newSet.has(pageId)) {
+      newSet.delete(pageId);
     } else {
-      expandedPages.add(pageId);
+      newSet.add(pageId);
     }
-    expandedPages = expandedPages; // Trigger reactivity
+    expandedPages = newSet;
   }
 
   function handleSelect(event: CustomEvent<{ pageId: string }>) {
-    dispatch('select', event.detail);
+    onpageselect?.(event);
   }
 
   function handleCreate(event: CustomEvent<{ parentId: string | null }>) {
-    const { parentId } = event.detail;
-    const newPage = pageManager.createPage({
-      workspaceId: WORKSPACE_ID,
-      parentId,
-      title: 'Untitled'
-    });
-    loadPages();
-    dispatch('select', { pageId: newPage.id });
+    const parentId = event.detail?.parentId || undefined;
+    oncreatepage?.(new CustomEvent('createpage', { detail: { parentId } }));
     
     if (parentId) {
-      expandedPages.add(parentId);
-      expandedPages = expandedPages;
+      const newSet = new Set(expandedPages);
+      newSet.add(parentId);
+      expandedPages = newSet;
     }
+    
+    loadPages();
   }
 
   function createRootPage() {
-    handleCreate({ detail: { parentId: null } } as CustomEvent<{ parentId: null }>);
+    oncreatepage?.(new CustomEvent('createpage', { detail: {} }));
+    loadPages();
   }
 </script>
 
@@ -80,7 +96,7 @@
         <span>Private</span>
         <button 
           class="add-page-btn"
-          on:click={createRootPage}
+          onclick={createRootPage}
           title="Add a page"
           aria-label="Add a page"
         >
@@ -92,7 +108,7 @@
         {#each rootPages as page (page.id)}
           <PageTreeItem 
             {page}
-            {activePageId}
+            activePageId={selectedPageId}
             {expandedPages}
             depth={0}
             on:toggle={handleToggle}
@@ -112,7 +128,7 @@
 
   <!-- Bottom Actions -->
   <div class="bottom-actions">
-    <button class="action-btn" on:click={createRootPage}>
+    <button class="action-btn" onclick={createRootPage}>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       New Page
     </button>
