@@ -45,3 +45,9 @@ export { ErrorHandlerService, errorHandler } from './error-handler';
 
 // Notification service
 export { NotificationService, notificationService } from './notification';
+
+// Database service
+export { DatabaseService, databaseService } from './database-service';
+
+// Share service
+export { ShareService, shareService } from './share-service';
