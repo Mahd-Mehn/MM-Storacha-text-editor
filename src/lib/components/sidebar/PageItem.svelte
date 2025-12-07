@@ -106,10 +106,11 @@
     class:has-children={page.children.length > 0}
     class:selected={isSelected}
     style="padding-left: {level * 1.25 + 0.5}rem"
-    on:click={handleClick}
-    on:contextmenu={handleContextMenu}
-    on:mouseenter={() => (isHovered = true)}
-    on:mouseleave={() => (isHovered = false)}
+    onclick={handleClick}
+    onkeydown={(e) => e.key === 'Enter' && handleClick(e)}
+    oncontextmenu={handleContextMenu}
+    onmouseenter={() => (isHovered = true)}
+    onmouseleave={() => (isHovered = false)}
     role="button"
     tabindex="0"
   >
@@ -118,7 +119,7 @@
       <button
         class="expand-btn"
         class:expanded
-        on:click={toggleExpanded}
+        onclick={toggleExpanded}
         aria-label={expanded ? "Collapse" : "Expand"}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -145,8 +146,8 @@
       <input
         bind:this={renameInput}
         bind:value={renameValue}
-        on:blur={finishRename}
-        on:keydown={handleRenameKeydown}
+        onblur={finishRename}
+        onkeydown={handleRenameKeydown}
         class="rename-input"
         type="text"
       />
@@ -162,7 +163,7 @@
         {#if page.type === "folder"}
           <button
             class="action-btn"
-            on:click={(e) => {
+            onclick={(e) => {
               e.stopPropagation();
               handleAddSubpage();
             }}
@@ -180,7 +181,7 @@
         {/if}
         <button
           class="action-btn"
-          on:click={(e) => {
+          onclick={(e) => {
             e.stopPropagation();
             handleContextMenu(e);
           }}
@@ -213,27 +214,27 @@
     style="left: {contextMenuX}px; top: {contextMenuY}px"
     use:clickOutside={closeContextMenu}
   >
-    <button class="context-menu-item" on:click={startRename}>
+    <button class="context-menu-item" onclick={startRename}>
       <span class="context-icon">✏️</span>
       Rename
     </button>
     {#if page.type === "folder"}
-      <button class="context-menu-item" on:click={handleAddSubpage}>
+      <button class="context-menu-item" onclick={handleAddSubpage}>
         <span class="context-icon">📄</span>
         New Page
       </button>
-      <button class="context-menu-item" on:click={handleAddFolder}>
+      <button class="context-menu-item" onclick={handleAddFolder}>
         <span class="context-icon">📁</span>
         New Folder
       </button>
       <div class="context-divider"></div>
     {/if}
-    <button class="context-menu-item" on:click={handleDuplicate}>
+    <button class="context-menu-item" onclick={handleDuplicate}>
       <span class="context-icon">📋</span>
       Duplicate
     </button>
     <div class="context-divider"></div>
-    <button class="context-menu-item danger" on:click={handleDelete}>
+    <button class="context-menu-item danger" onclick={handleDelete}>
       <span class="context-icon">🗑️</span>
       Delete
     </button>

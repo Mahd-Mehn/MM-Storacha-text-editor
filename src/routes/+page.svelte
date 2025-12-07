@@ -320,6 +320,7 @@
         <button
           class="icon-btn-small"
           onclick={() => (showVersionHistory = false)}
+          aria-label="Close version history"
         >
           <svg
             width="16"
@@ -354,11 +355,11 @@
 
 <!-- Version Diff Viewer Modal -->
 {#if showDiffViewer && currentNote && compareFromVersion !== null && compareToVersion !== null}
-  <div class="modal-overlay" onclick={closeDiffViewer}>
-    <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+  <div class="modal-overlay" onclick={closeDiffViewer} onkeydown={(e) => e.key === 'Escape' && closeDiffViewer()} role="dialog" aria-modal="true" aria-label="Version comparison dialog" tabindex="-1">
+    <div class="modal-content" role="document">
       <div class="modal-header">
         <h2>Version Comparison</h2>
-        <button class="icon-btn-small" onclick={closeDiffViewer}>
+        <button class="icon-btn-small" onclick={closeDiffViewer} aria-label="Close version comparison">
           <svg
             width="20"
             height="20"

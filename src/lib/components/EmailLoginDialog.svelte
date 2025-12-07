@@ -116,8 +116,8 @@
   }
 </script>
 
-<div class="dialog-overlay" onclick={handleClose}>
-  <div class="dialog" onclick={(e) => e.stopPropagation()}>
+<div class="dialog-overlay" onclick={handleClose} onkeydown={(e) => e.key === 'Escape' && handleClose()} role="dialog" aria-modal="true" aria-label="Email login dialog" tabindex="-1">
+  <div class="dialog" role="document">
     <div class="dialog-header">
       <h2>
         {#if step === 'email'}

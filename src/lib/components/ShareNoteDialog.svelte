@@ -105,8 +105,8 @@
   }
 </script>
 
-<div class="share-dialog-overlay" onclick={onClose}>
-  <div class="share-dialog" onclick={(e) => e.stopPropagation()}>
+<div class="share-dialog-overlay" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" aria-label="Share note dialog" tabindex="-1">
+  <div class="share-dialog" role="document">
     <div class="dialog-header">
       <h2>Share Note</h2>
       <button class="close-button" onclick={onClose}>✕</button>
@@ -159,8 +159,8 @@
 
           <!-- CID Display -->
           <div class="cid-section">
-            <label>Content Identifier (CID)</label>
-            <div class="cid-display">
+            <span id="cid-label" class="section-label">Content Identifier (CID)</span>
+            <div class="cid-display" aria-labelledby="cid-label">
               <code class="cid-text">{note.metadata.storachaCID}</code>
               <button class="copy-button" onclick={copyShortCID} title="Copy CID">
                 📋
@@ -170,13 +170,14 @@
 
           <!-- Shareable Link -->
           <div class="link-section">
-            <label>Shareable Link</label>
+            <label for="shareable-link">Shareable Link</label>
             <div class="link-display">
               <input 
                 type="text" 
                 readonly 
                 value={shareableLink || ''} 
                 class="link-input"
+                id="shareable-link"
               />
               <button class="copy-button" onclick={copyToClipboard} title="Copy link">
                 📋
@@ -203,7 +204,7 @@
 
           <!-- Alternative Gateways -->
           <div class="gateways-section">
-            <label>Alternative IPFS Gateways</label>
+            <span class="section-label">Alternative IPFS Gateways</span>
             <div class="gateway-links">
               <a 
                 href="https://ipfs.io/ipfs/{note.metadata.storachaCID}" 

@@ -11,7 +11,8 @@
   export let editable: boolean = true;
   export let placeholder: string = "Start writing...";
   export let onUpdate: ((content: string) => void) | undefined = undefined;
-  export let showToolbar: boolean = false;
+  // @ts-ignore - Exposed for external reference
+  export const showToolbar: boolean = false;
 
   // Editor instance
   let editor: Editor | null = null;
