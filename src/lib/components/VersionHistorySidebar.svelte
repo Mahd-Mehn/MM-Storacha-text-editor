@@ -182,9 +182,10 @@
           class:selected={isVersionSelected(version.version)}
           class:current={version.version === currentVersion}
           onclick={() => handleVersionClick(version.version)}
-          onkeydown={(e) => e.key === 'Enter' && handleVersionClick(version.version)}
+          onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleVersionClick(version.version)}
           role="button"
           tabindex="0"
+          aria-label={`Version ${version.version}${version.version === currentVersion ? ' (current)' : ''}`}
         >
           <div class="version-header">
             <div class="version-number">

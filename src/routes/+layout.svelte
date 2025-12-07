@@ -213,7 +213,7 @@
             <span class="banner-icon">📧</span>
             <div class="banner-text">
               <strong>Enable Cloud Storage</strong>
-              <p>Login with email to upload and share notes via IPFS</p>
+              <p>Login with email to upload and share notes via Storacha</p>
             </div>
           </div>
           <button class="banner-button" onclick={() => (showEmailLogin = true)}>

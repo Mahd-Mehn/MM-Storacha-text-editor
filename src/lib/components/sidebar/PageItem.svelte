@@ -107,12 +107,13 @@
     class:selected={isSelected}
     style="padding-left: {level * 1.25 + 0.5}rem"
     onclick={handleClick}
-    onkeydown={(e) => e.key === 'Enter' && handleClick(e)}
+    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick(e)}
     oncontextmenu={handleContextMenu}
     onmouseenter={() => (isHovered = true)}
     onmouseleave={() => (isHovered = false)}
     role="button"
     tabindex="0"
+    aria-label={`${page.title || 'Untitled'} ${page.type}`}
   >
     <!-- Expand/Collapse Button -->
     {#if page.type === "folder"}

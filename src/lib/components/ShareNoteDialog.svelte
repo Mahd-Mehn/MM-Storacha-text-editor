@@ -105,8 +105,9 @@
   }
 </script>
 
-<div class="share-dialog-overlay" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" aria-label="Share note dialog" tabindex="-1">
-  <div class="share-dialog" role="document">
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<div class="share-dialog-overlay" onclick={onClose} role="presentation">
+  <div class="share-dialog" role="dialog" aria-modal="true" aria-label="Share note dialog">
     <div class="dialog-header">
       <h2>Share Note</h2>
       <button class="close-button" onclick={onClose}>✕</button>

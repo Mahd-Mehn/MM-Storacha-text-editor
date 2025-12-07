@@ -355,8 +355,9 @@
 
 <!-- Version Diff Viewer Modal -->
 {#if showDiffViewer && currentNote && compareFromVersion !== null && compareToVersion !== null}
-  <div class="modal-overlay" onclick={closeDiffViewer} onkeydown={(e) => e.key === 'Escape' && closeDiffViewer()} role="dialog" aria-modal="true" aria-label="Version comparison dialog" tabindex="-1">
-    <div class="modal-content" role="document">
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={closeDiffViewer} role="presentation">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-label="Version comparison dialog">
       <div class="modal-header">
         <h2>Version Comparison</h2>
         <button class="icon-btn-small" onclick={closeDiffViewer} aria-label="Close version comparison">
