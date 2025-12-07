@@ -133,17 +133,18 @@
       </button>
     </div>
 
-    <pre><code
+    <pre><div
       bind:this={editorElement}
       contenteditable={editable}
-      class="block-content"
+      class="block-content code-editor"
       data-placeholder="// Write your code here..."
       oninput={handleInput}
       onkeydown={handleKeydown}
       onfocus={() => onFocus?.()}
       role="textbox"
+      aria-label="Code editor"
       tabindex="0"
-    ></code></pre>
+    ></div></pre>
   </div>
 </div>
 

@@ -9,9 +9,12 @@
     PropertyValue,
     SortRule,
     FilterGroup,
-    ViewType
+    ViewType,
+    SyncMetadata
   } from '$lib/types/database';
   import { databaseService } from '$lib/services/database-service';
+  import { storachaClient } from '$lib/services/storacha';
+  import { shareService } from '$lib/services/share-service';
   import TableView from './TableView.svelte';
   import BoardView from './BoardView.svelte';
   import CalendarView from './CalendarView.svelte';
@@ -35,6 +38,16 @@
   let showAddPropertyModal = $state(false);
   let showShareModal = $state(false);
   let showViewMenu = $state(false);
+  
+  // Sync status
+  let syncStatus = $state<SyncMetadata | null>(null);
+  let lastSyncTime = $state<string | null>(null);
+  let storachaReady = $state(false);
+  
+  // Sharing status
+  let hasActiveShares = $state(false);
+  let activeShareCount = $state(0);
+  let hasEncryptedShares = $state(false);
 
   // Computed
   function getCurrentView(): DatabaseView | null {
@@ -61,12 +74,71 @@
 
       currentViewId = manifest.schema.views[0]?.id || null;
       await loadRows();
+      
+      // Check Storacha status and sync info
+      await checkSyncStatus();
     } catch (err) {
       console.error('Failed to load database:', err);
       error = 'Failed to load database';
     } finally {
       loading = false;
     }
+  }
+  
+  // Check sync status
+  async function checkSyncStatus() {
+    try {
+      storachaReady = storachaClient.isReady();
+      syncStatus = databaseService.getSyncStatus(databaseId);
+      if (syncStatus?.lastSync) {
+        lastSyncTime = formatRelativeTime(syncStatus.lastSync);
+      }
+      if (manifest?.storachaCID) {
+        lastSyncTime = formatRelativeTime(manifest.lastSync);
+      }
+      
+      // Check sharing status
+      await checkSharingStatus();
+    } catch (err) {
+      console.warn('Could not check sync status:', err);
+    }
+  }
+  
+  // Check sharing status
+  async function checkSharingStatus() {
+    try {
+      await shareService.initialize();
+      const links = await shareService.getShareLinks(databaseId);
+      const delegations = await shareService.getDelegations(databaseId);
+      
+      const activeLinks = links.filter(l => !l.expiresAt || new Date(l.expiresAt) > new Date());
+      const activeDelegations = delegations.filter(d => d.isActive);
+      
+      activeShareCount = activeLinks.length + activeDelegations.length;
+      hasActiveShares = activeShareCount > 0;
+      
+      // Check if any delegations use encryption (have key shares)
+      hasEncryptedShares = activeDelegations.some(d => d.capabilities.includes('database/read'));
+    } catch (err) {
+      console.warn('Could not check sharing status:', err);
+    }
+  }
+  
+  // Format relative time
+  function formatRelativeTime(isoString: string): string {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
   }
 
   // Load rows based on current view
@@ -174,16 +246,20 @@
 
   // Sync to Storacha
   async function handleSync() {
-    if (!manifest || syncing) return;
+    if (!manifest || syncing || !storachaReady) return;
 
     syncing = true;
     try {
       const cid = await databaseService.syncToStoracha(databaseId);
       if (cid) {
         console.log('Database synced with CID:', cid);
+        // Refresh manifest to get updated sync info
+        manifest = await databaseService.getDatabase(databaseId);
+        await checkSyncStatus();
       }
     } catch (err) {
       console.error('Sync failed:', err);
+      // Could add toast notification here
     } finally {
       syncing = false;
     }
@@ -227,9 +303,39 @@
           <span class="database-icon">{manifest.schema.icon}</span>
         {/if}
         <h1 class="database-title">{manifest.schema.name}</h1>
+        
+        <!-- Sync Status Badge -->
+        <div class="sync-status-badge" class:synced={!!manifest.storachaCID} class:unsynced={!manifest.storachaCID}>
+          {#if manifest.storachaCID}
+            <span class="status-dot synced"></span>
+            <span class="status-text">Synced</span>
+            {#if lastSyncTime}
+              <span class="sync-time">{lastSyncTime}</span>
+            {/if}
+          {:else}
+            <span class="status-dot unsynced"></span>
+            <span class="status-text">Not synced</span>
+          {/if}
+        </div>
+        
+        <!-- Sharing Status Badge -->
+        {#if hasActiveShares}
+          <div class="share-status-badge" class:encrypted={hasEncryptedShares}>
+            <span class="share-icon">{hasEncryptedShares ? '🔐' : '🔗'}</span>
+            <span class="share-text">
+              {activeShareCount} {activeShareCount === 1 ? 'share' : 'shares'}
+            </span>
+          </div>
+        {/if}
       </div>
 
       <div class="header-actions">
+        <!-- Storacha connection indicator -->
+        <div class="storacha-indicator" class:connected={storachaReady} class:disconnected={!storachaReady}>
+          <span class="indicator-dot"></span>
+          <span class="indicator-text">{storachaReady ? 'Storacha' : 'Offline'}</span>
+        </div>
+        
         <button 
           class="action-btn"
           onclick={() => showShareModal = true}
@@ -238,13 +344,16 @@
           🔗 Share
         </button>
         <button 
-          class="action-btn"
+          class="action-btn sync-btn"
           class:syncing
           onclick={handleSync}
-          disabled={syncing}
-          title="Sync to Storacha"
+          disabled={syncing || !storachaReady}
+          title={storachaReady ? 'Sync to Storacha' : 'Connect to Storacha first'}
         >
-          {syncing ? '⟳' : '☁'} {syncing ? 'Syncing...' : 'Sync'}
+          <span class="sync-icon" class:spinning={syncing}>
+            {syncing ? '⟳' : '☁'}
+          </span>
+          <span>{syncing ? 'Syncing...' : 'Sync'}</span>
         </button>
       </div>
     </div>
@@ -469,6 +578,129 @@
 
   .action-btn.syncing {
     opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  /* Sync Status Badge */
+  .sync-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    margin-left: 0.75rem;
+  }
+
+  .sync-status-badge.synced {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+  }
+
+  .sync-status-badge.unsynced {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .status-dot.synced {
+    background: #22c55e;
+  }
+
+  .status-dot.unsynced {
+    background: #f59e0b;
+  }
+
+  .sync-time {
+    color: var(--text-tertiary, #9ca3af);
+    font-size: 0.6875rem;
+  }
+
+  /* Share Status Badge */
+  .share-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+  }
+
+  .share-status-badge.encrypted {
+    background: rgba(139, 92, 246, 0.1);
+    color: #7c3aed;
+  }
+
+  .share-icon {
+    font-size: 0.75rem;
+  }
+
+  .share-text {
+    font-weight: 500;
+  }
+
+  /* Storacha Connection Indicator */
+  .storacha-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .storacha-indicator.connected {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+  }
+
+  .storacha-indicator.disconnected {
+    background: rgba(156, 163, 175, 0.1);
+    color: #9ca3af;
+  }
+
+  .indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .storacha-indicator.connected .indicator-dot {
+    background: #22c55e;
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
+  }
+
+  .storacha-indicator.disconnected .indicator-dot {
+    background: #9ca3af;
+  }
+
+  /* Sync Button */
+  .sync-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .sync-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+  }
+
+  .sync-icon.spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  .sync-btn:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
   }
 

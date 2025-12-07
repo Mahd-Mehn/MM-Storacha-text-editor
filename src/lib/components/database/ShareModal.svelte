@@ -1,14 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { PublicShareLink, SharePermission } from '$lib/types/database';
+  import type { PublicShareLink, SharePermission, UCANDelegation } from '$lib/types/database';
   import { shareService } from '$lib/services/share-service';
+  import { storachaClient } from '$lib/services/storacha';
+  import { authService } from '$lib/services/auth';
 
   // Props
   export let databaseId: string;
   export let databaseName: string;
   export let onClose: () => void;
 
-  // State
+  // State - Link sharing
   let shareLinks = $state<PublicShareLink[]>([]);
   let loading = $state(true);
   let creating = $state(false);
@@ -17,6 +19,19 @@
   let newLinkExpiry = $state('');
   let showNewLinkForm = $state(false);
   let copiedLinkId = $state<string | null>(null);
+  
+  // State - UCAN delegation
+  let activeTab = $state<'links' | 'ucan'>('links');
+  let delegations = $state<UCANDelegation[]>([]);
+  let loadingDelegations = $state(false);
+  let creatingDelegation = $state(false);
+  let showDelegationForm = $state(false);
+  let recipientDid = $state('');
+  let delegationAbilities = $state<string[]>(['read']);
+  let delegationExpiry = $state('');
+  let delegationError = $state<string | null>(null);
+  let copiedDelegationId = $state<string | null>(null);
+  let storachaReady = $state(false);
 
   async function loadShareLinks() {
     loading = true;
@@ -27,6 +42,17 @@
       console.error('Failed to load share links:', error);
     } finally {
       loading = false;
+    }
+  }
+  
+  async function loadDelegations() {
+    loadingDelegations = true;
+    try {
+      delegations = await shareService.getDelegations(databaseId);
+    } catch (error) {
+      console.error('Failed to load delegations:', error);
+    } finally {
+      loadingDelegations = false;
     }
   }
 
@@ -92,9 +118,111 @@
       onClose();
     }
   }
+  
+  // UCAN Delegation functions
+  async function createDelegation() {
+    if (!recipientDid.trim()) {
+      delegationError = 'Recipient DID is required';
+      return;
+    }
+    
+    if (!recipientDid.startsWith('did:')) {
+      delegationError = 'Invalid DID format. Must start with "did:"';
+      return;
+    }
+    
+    creatingDelegation = true;
+    delegationError = null;
+    
+    try {
+      // Map UI abilities to ResourceCapability type
+      const capabilities: Array<'database/read' | 'database/write' | 'database/delete' | 'database/share'> = 
+        delegationAbilities.includes('write') 
+          ? ['database/read', 'database/write'] 
+          : ['database/read'];
+      
+      const result = await shareService.createDelegation(
+        databaseId,
+        'database',
+        recipientDid,
+        capabilities,
+        delegationExpiry ? { expiresAt: new Date(delegationExpiry).toISOString() } : undefined
+      );
+      
+      if (result.success && result.delegation) {
+        delegations = [...delegations, result.delegation];
+        showDelegationForm = false;
+        recipientDid = '';
+        delegationAbilities = ['read'];
+        delegationExpiry = '';
+      } else {
+        delegationError = result.error || 'Failed to create delegation';
+      }
+    } catch (error) {
+      console.error('Failed to create delegation:', error);
+      delegationError = error instanceof Error ? error.message : 'Failed to create delegation';
+    } finally {
+      creatingDelegation = false;
+    }
+  }
+  
+  async function revokeDelegation(delegationId: string) {
+    try {
+      await shareService.revokeDelegation(delegationId);
+      delegations = delegations.filter(d => d.id !== delegationId);
+    } catch (error) {
+      console.error('Failed to revoke delegation:', error);
+    }
+  }
+  
+  async function copyDelegationProof(delegation: UCANDelegation) {
+    try {
+      // Copy the serialized UCAN token for the recipient to claim
+      const proof = delegation.ucanToken || delegation.id;
+      await navigator.clipboard.writeText(proof);
+      copiedDelegationId = delegation.id;
+      setTimeout(() => {
+        copiedDelegationId = null;
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy delegation proof:', error);
+    }
+  }
+  
+  function toggleAbility(ability: string) {
+    if (delegationAbilities.includes(ability)) {
+      delegationAbilities = delegationAbilities.filter(a => a !== ability);
+      // Ensure at least read is always selected
+      if (delegationAbilities.length === 0) {
+        delegationAbilities = ['read'];
+      }
+    } else {
+      delegationAbilities = [...delegationAbilities, ability];
+    }
+  }
+  
+  function getAbilityLabel(abilities: string[]): string {
+    if (abilities.includes('write')) return 'Read & Write';
+    return 'Read Only';
+  }
+  
+  function getCapabilityLabel(capabilities: string[]): string {
+    if (capabilities.some(c => c.includes('/write'))) return 'Read & Write';
+    if (capabilities.some(c => c.includes('/delete'))) return 'Full Access';
+    return 'Read Only';
+  }
+  
+  function formatDid(did: string): string {
+    if (did.length <= 20) return did;
+    return `${did.slice(0, 12)}...${did.slice(-8)}`;
+  }
 
   onMount(() => {
     loadShareLinks();
+    storachaReady = storachaClient.isReady();
+    if (storachaReady) {
+      loadDelegations();
+    }
   });
 </script>
 
@@ -105,18 +233,43 @@
     <div class="modal-header">
       <div class="header-content">
         <h2>Share "{databaseName}"</h2>
-        <p class="subtitle">Create shareable links for others to access this database</p>
+        <p class="subtitle">Share via links or UCAN delegation</p>
       </div>
       <button class="close-btn" onclick={onClose}>×</button>
     </div>
 
+    <!-- Tabs -->
+    <div class="share-tabs">
+      <button 
+        class="share-tab" 
+        class:active={activeTab === 'links'}
+        onclick={() => activeTab = 'links'}
+      >
+        🔗 Share Links
+      </button>
+      <button 
+        class="share-tab" 
+        class:active={activeTab === 'ucan'}
+        onclick={() => activeTab = 'ucan'}
+        disabled={!storachaReady}
+        title={storachaReady ? 'UCAN Delegation' : 'Connect to Storacha to use UCAN'}
+      >
+        🔐 UCAN Delegation
+        {#if !storachaReady}
+          <span class="tab-badge offline">Offline</span>
+        {/if}
+      </button>
+    </div>
+
     <div class="modal-body">
-      {#if loading}
-        <div class="loading">
-          <div class="spinner"></div>
-          <p>Loading share links...</p>
-        </div>
-      {:else}
+      {#if activeTab === 'links'}
+        <!-- Link Sharing Tab -->
+        {#if loading}
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading share links...</p>
+          </div>
+        {:else}
         <!-- Existing Links -->
         {#if shareLinks.length > 0}
           <div class="links-section">
@@ -242,6 +395,156 @@
             Use password protection for sensitive data.
           </p>
         </div>
+        {/if}
+      {:else}
+        <!-- UCAN Delegation Tab -->
+        {#if loadingDelegations}
+          <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading delegations...</p>
+          </div>
+        {:else}
+          <!-- Existing Delegations -->
+          {#if delegations.length > 0}
+            <div class="delegations-section">
+              <h3>Active Delegations</h3>
+              <div class="delegations-list">
+                {#each delegations as delegation (delegation.id)}
+                  <div class="delegation-item">
+                    <div class="delegation-info">
+                      <div class="delegation-recipient">
+                        <span class="did-label">To:</span>
+                        <span class="did-value" title={delegation.audience}>{formatDid(delegation.audience)}</span>
+                        <button 
+                          class="copy-btn small"
+                          onclick={() => copyDelegationProof(delegation)}
+                        >
+                          {copiedDelegationId === delegation.id ? '✓ Copied' : '📋 Copy Proof'}
+                        </button>
+                      </div>
+                      <div class="delegation-meta">
+                        <span class="ability-badge">{getCapabilityLabel(delegation.capabilities)}</span>
+                        {#if delegation.expiresAt}
+                          <span class="meta-tag">⏰ Expires {formatDate(delegation.expiresAt)}</span>
+                        {:else}
+                          <span class="meta-tag">∞ No expiry</span>
+                        {/if}
+                        <span class="meta-tag" class:revoked={!delegation.isActive}>
+                          {!delegation.isActive ? '⛔ Revoked' : '✓ Active'}
+                        </span>
+                      </div>
+                    </div>
+                    {#if delegation.isActive}
+                      <button 
+                        class="revoke-btn"
+                        onclick={() => revokeDelegation(delegation.id)}
+                        title="Revoke delegation"
+                      >
+                        🗑
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Create New Delegation -->
+          {#if showDelegationForm}
+            <div class="new-delegation-form">
+              <h3>Create UCAN Delegation</h3>
+              
+              {#if delegationError}
+                <div class="error-message">{delegationError}</div>
+              {/if}
+              
+              <div class="form-group">
+                <label for="recipient-did">Recipient DID</label>
+                <input
+                  id="recipient-did"
+                  type="text"
+                  bind:value={recipientDid}
+                  placeholder="did:key:z6Mk..."
+                  class:error={delegationError && !recipientDid.startsWith('did:')}
+                />
+                <p class="help-text">Enter the recipient's decentralized identifier</p>
+              </div>
+              
+              <div class="form-group">
+                <label>Capabilities</label>
+                <div class="ability-options">
+                  <button
+                    class="ability-option"
+                    class:selected={delegationAbilities.includes('read') && !delegationAbilities.includes('write')}
+                    onclick={() => { delegationAbilities = ['read']; }}
+                  >
+                    <span class="ability-icon">👁</span>
+                    <span class="ability-label">Read Only</span>
+                    <span class="ability-desc">View database content</span>
+                  </button>
+                  <button
+                    class="ability-option"
+                    class:selected={delegationAbilities.includes('write')}
+                    onclick={() => { delegationAbilities = ['read', 'write']; }}
+                  >
+                    <span class="ability-icon">✏️</span>
+                    <span class="ability-label">Read & Write</span>
+                    <span class="ability-desc">View and modify content</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div class="form-group">
+                <label for="delegation-expiry">Expiration (optional)</label>
+                <input
+                  id="delegation-expiry"
+                  type="date"
+                  bind:value={delegationExpiry}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+
+              <div class="form-actions">
+                <button 
+                  class="btn-secondary"
+                  onclick={() => { showDelegationForm = false; delegationError = null; }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  class="btn-primary"
+                  onclick={createDelegation}
+                  disabled={creatingDelegation}
+                >
+                  {creatingDelegation ? 'Creating...' : 'Create Delegation'}
+                </button>
+              </div>
+            </div>
+          {:else}
+            <button 
+              class="create-link-btn"
+              onclick={() => showDelegationForm = true}
+            >
+              <span class="icon">+</span>
+              <span>Create new UCAN delegation</span>
+            </button>
+          {/if}
+
+          <!-- UCAN Info -->
+          <div class="share-info">
+            <h4>About UCAN Delegation</h4>
+            <ul>
+              <li><strong>Decentralized</strong> - No central server required for access control</li>
+              <li><strong>Cryptographic</strong> - Permissions are cryptographically signed</li>
+              <li><strong>Revocable</strong> - You can revoke access at any time</li>
+              <li><strong>Offline-capable</strong> - Recipients can prove access offline</li>
+            </ul>
+            <p class="note">
+              UCAN delegations allow fine-grained access control using decentralized identifiers (DIDs).
+              Share the delegation proof with the recipient to grant access.
+            </p>
+          </div>
+        {/if}
       {/if}
     </div>
   </div>
@@ -645,5 +948,209 @@
     color: var(--text-tertiary, #9ca3af);
     margin: 0;
     font-style: italic;
+  }
+
+  /* Share Tabs */
+  .share-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    padding: 0 1.5rem;
+  }
+
+  .share-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--text-secondary, #6b7280);
+    transition: all 0.15s;
+  }
+
+  .share-tab:hover:not(:disabled) {
+    color: var(--text-primary, #111827);
+  }
+
+  .share-tab.active {
+    color: var(--accent-color, #3b82f6);
+    border-bottom-color: var(--accent-color, #3b82f6);
+  }
+
+  .share-tab:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .tab-badge {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    font-weight: 500;
+  }
+
+  .tab-badge.offline {
+    background: rgba(156, 163, 175, 0.2);
+    color: #6b7280;
+  }
+
+  /* Delegations */
+  .delegations-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .delegations-section h3 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 0.75rem 0;
+  }
+
+  .delegations-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .delegation-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0.875rem;
+    background: var(--bg-secondary, #f9fafb);
+    border-radius: 0.5rem;
+    gap: 0.75rem;
+  }
+
+  .delegation-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .delegation-recipient {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .did-label {
+    font-size: 0.75rem;
+    color: var(--text-tertiary, #9ca3af);
+  }
+
+  .did-value {
+    font-size: 0.75rem;
+    font-family: monospace;
+    color: var(--text-primary, #111827);
+    background: var(--bg-tertiary, #e5e7eb);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+  }
+
+  .copy-btn.small {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .delegation-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .ability-badge {
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.5rem;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    border-radius: 0.25rem;
+    font-weight: 500;
+  }
+
+  .meta-tag.revoked {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+  }
+
+  /* New Delegation Form */
+  .new-delegation-form {
+    background: var(--bg-secondary, #f9fafb);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .new-delegation-form h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+    color: var(--text-primary, #111827);
+  }
+
+  .error-message {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .help-text {
+    font-size: 0.6875rem;
+    color: var(--text-tertiary, #9ca3af);
+    margin: 0.25rem 0 0 0;
+  }
+
+  input.error {
+    border-color: #dc2626;
+  }
+
+  .ability-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .ability-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background: var(--bg-primary, #ffffff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .ability-option:hover {
+    border-color: var(--accent-color, #3b82f6);
+  }
+
+  .ability-option.selected {
+    border-color: var(--accent-color, #3b82f6);
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .ability-icon {
+    font-size: 1.25rem;
+  }
+
+  .ability-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+  }
+
+  .ability-desc {
+    font-size: 0.625rem;
+    color: var(--text-tertiary, #9ca3af);
   }
 </style>

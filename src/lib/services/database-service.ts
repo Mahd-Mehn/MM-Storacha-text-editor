@@ -36,9 +36,15 @@ import type {
   DatabaseEventCallback,
   DatabaseEvent,
   SerializedDatabase,
-  SerializedDatabaseRow
+  SerializedDatabaseRow,
+  SyncedDatabaseServiceInterface,
+  SyncMetadata,
+  SyncConflict,
+  ConflictResolution
 } from '$lib/types/database';
 import { storachaClient } from './storacha';
+import { shareService } from './share-service';
+import { authService } from './auth';
 
 // Storage keys
 const DATABASES_STORAGE_KEY = 'storacha_databases';
@@ -48,12 +54,15 @@ const DATABASES_SYNC_KEY = 'storacha_databases_sync';
 /**
  * Database Service - Manages databases stored on Storacha
  */
-class DatabaseService {
+class DatabaseService implements SyncedDatabaseServiceInterface {
   private databases: Map<string, DatabaseManifest> = new Map();
   private rowCache: Map<string, DatabaseRow> = new Map();
+  private syncInProgress: Set<string> = new Set();
   private initialized = false;
   private eventListeners: Map<DatabaseEventType, Set<DatabaseEventCallback>> = new Map();
-  private syncInProgress: Set<string> = new Set();
+  private syncQueue: Set<string> = new Set();
+  private isSyncingFlag = false;
+  private syncConflicts: SyncConflict[] = [];
 
   // ============================================================================
   // Initialization
@@ -1223,9 +1232,12 @@ class DatabaseService {
       manifest.lastSync = new Date().toISOString();
 
       // 3. Upload manifest
+      // Fetch share configs
+      const shareConfigs = await shareService.getShareConfigs(databaseId);
+
       const serializedDb: SerializedDatabase = {
         manifest,
-        shareConfigs: [] // TODO: Include share configs
+        shareConfigs
       };
 
       const manifestJson = JSON.stringify(serializedDb);
@@ -1311,23 +1323,7 @@ class DatabaseService {
     }
   }
 
-  /**
-   * Get sync status for a database
-   */
-  getSyncStatus(databaseId: string): { synced: boolean; lastSync?: string; cid?: string } {
-    const syncInfo = JSON.parse(localStorage.getItem(DATABASES_SYNC_KEY) || '{}');
-    const info = syncInfo[databaseId];
-    
-    if (!info) {
-      return { synced: false };
-    }
 
-    return {
-      synced: true,
-      lastSync: info.syncedAt,
-      cid: info.cid
-    };
-  }
 
   /**
    * Check if sync is in progress
@@ -1429,6 +1425,106 @@ class DatabaseService {
     importData.manifest.schema.name = newName || `${importData.manifest.schema.name} (Copy)`;
 
     return this.importFromJSON(JSON.stringify(importData));
+  }
+
+  // ============================================================================
+  // Sync & Conflict Resolution
+  // ============================================================================
+  
+  async syncDatabase(databaseId: string): Promise<SyncMetadata> {
+    await this.syncToStoracha(databaseId);
+    return this.getSyncStatus(databaseId);
+  }
+  
+  async syncRow(rowId: string): Promise<SyncMetadata> {
+    const row = await this.getRow(rowId);
+    if (row) {
+      await this.syncToStoracha(row.databaseId);
+      return this.getSyncStatus(row.databaseId);
+    }
+    return { 
+      status: 'error', 
+      retryCount: 0,
+      error: 'Row not found'
+    };
+  }
+  
+  getSyncStatus(databaseId: string): SyncMetadata {
+    const syncInfo = JSON.parse(localStorage.getItem(DATABASES_SYNC_KEY) || '{}');
+    const info = syncInfo[databaseId];
+    
+    if (!info) {
+      return { 
+        status: 'pending',
+        retryCount: 0
+      };
+    }
+
+    return {
+      status: this.syncInProgress.has(databaseId) ? 'syncing' : 'synced',
+      lastSyncedAt: info.syncedAt,
+      remoteCID: info.cid,
+      retryCount: 0
+    };
+  }
+  
+  async resolveConflict(conflict: SyncConflict, resolution: ConflictResolution): Promise<boolean> {
+    // TODO: Implement conflict resolution logic
+    // For now, we just acknowledge the conflict
+    this.syncConflicts = this.syncConflicts.filter(c => 
+      c.resourceId !== conflict.resourceId
+    );
+    return true;
+  }
+  
+  async getConflicts(): Promise<SyncConflict[]> {
+    return this.syncConflicts;
+  }
+  
+  queueForSync(databaseId: string): void {
+    this.syncQueue.add(databaseId);
+    this.processOfflineQueue();
+  }
+  
+  async processOfflineQueue(): Promise<{ synced: number; failed: number; pending: number }> {
+    if (this.isSyncingFlag || this.syncQueue.size === 0) {
+      return { synced: 0, failed: 0, pending: this.syncQueue.size };
+    }
+
+    this.isSyncingFlag = true;
+    let synced = 0;
+    let failed = 0;
+
+    try {
+      const queue = Array.from(this.syncQueue);
+      for (const dbId of queue) {
+        const result = await this.syncToStoracha(dbId);
+        if (result) {
+          this.syncQueue.delete(dbId);
+          synced++;
+        } else {
+          failed++;
+        }
+      }
+    } finally {
+      this.isSyncingFlag = false;
+    }
+
+    return { synced, failed, pending: this.syncQueue.size };
+  }
+
+  async exportDatabase(databaseId: string, format: 'json' | 'csv'): Promise<Blob> {
+    const json = await this.exportToJSON(databaseId);
+    if (!json) throw new Error('Export failed');
+    
+    return new Blob([json], { type: 'application/json' });
+  }
+  
+  async importDatabase(data: Blob, format: 'json' | 'csv', options?: { merge?: boolean }): Promise<DatabaseSchema> {
+    const text = await data.text();
+    const result = await this.importFromJSON(text);
+    if (!result) throw new Error('Import failed');
+    return result;
   }
 }
 

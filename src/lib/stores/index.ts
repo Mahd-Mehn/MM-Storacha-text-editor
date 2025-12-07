@@ -16,6 +16,19 @@ export {
   clearSpaces 
 } from './space';
 
+// Database stores
+export {
+  databaseStore,
+  databases,
+  activeDatabase,
+  activeRows,
+  activeViews,
+  activeView,
+  databaseLoading,
+  databaseError,
+  databaseSyncStatus
+} from './database';
+
 // Connectivity monitoring stores
 export {
   connectionStatus,
