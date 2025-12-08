@@ -6,9 +6,13 @@
   import { authService } from '$lib/services/auth';
 
   // Props
-  export let databaseId: string;
-  export let databaseName: string;
-  export let onClose: () => void;
+  interface Props {
+    databaseId: string;
+    databaseName: string;
+    onClose: () => void;
+  }
+  
+  let { databaseId, databaseName, onClose }: Props = $props();
 
   // State - Link sharing
   let shareLinks = $state<PublicShareLink[]>([]);
@@ -149,8 +153,9 @@
         delegationExpiry ? { expiresAt: new Date(delegationExpiry).toISOString() } : undefined
       );
       
-      if (result.success && result.delegation) {
-        delegations = [...delegations, result.delegation];
+      if (result.success && result.delegationId) {
+        // Reload delegations to get the new one
+        await loadDelegations();
         showDelegationForm = false;
         recipientDid = '';
         delegationAbilities = ['read'];

@@ -41,7 +41,9 @@
         element: editorElement,
         extensions: [
           StarterKit.configure({
-            history: false as any,
+            // Disable history since we use Y.js for collaborative editing
+            // @ts-expect-error history option exists but is not typed
+            history: false,
           }),
           Typography,
           Collaboration.configure({

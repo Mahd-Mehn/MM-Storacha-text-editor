@@ -23,9 +23,13 @@
   import ShareModal from './ShareModal.svelte';
 
   // Props
-  export let databaseId: string;
-  export let readonly: boolean = false;
-  export let onRowOpen: ((row: DatabaseRow) => void) | undefined = undefined;
+  interface Props {
+    databaseId: string;
+    readonly?: boolean;
+    onRowOpen?: (row: DatabaseRow) => void;
+  }
+  
+  let { databaseId, readonly = false, onRowOpen = undefined }: Props = $props();
 
   // State
   let manifest = $state<DatabaseManifest | null>(null);
@@ -57,7 +61,6 @@
     }
     return manifest.schema.views[0];
   }
-
   // Load database
   async function loadDatabase() {
     loading = true;
@@ -90,8 +93,8 @@
     try {
       storachaReady = storachaClient.isReady();
       syncStatus = databaseService.getSyncStatus(databaseId);
-      if (syncStatus?.lastSync) {
-        lastSyncTime = formatRelativeTime(syncStatus.lastSync);
+      if (syncStatus?.lastSyncedAt) {
+        lastSyncTime = formatRelativeTime(syncStatus.lastSyncedAt);
       }
       if (manifest?.storachaCID) {
         lastSyncTime = formatRelativeTime(manifest.lastSync);

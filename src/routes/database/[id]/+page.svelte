@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import type { DatabaseRow, DatabaseManifest } from '$lib/types/database';
+  import type { DatabaseRow, DatabaseManifest, PropertyValue } from '$lib/types/database';
   import { databaseService } from '$lib/services/database-service';
   import { Database } from '$lib/components/database';
 
@@ -194,9 +194,7 @@
       default: return '•';
     }
   }
-</script>
-
-<script lang="ts">
+  
   async function updateProperty(propertyId: string, value: PropertyValue) {
     if (!selectedRow) return;
 

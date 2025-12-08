@@ -45,6 +45,7 @@ import type {
 import { storachaClient } from './storacha';
 import { shareService } from './share-service';
 import { authService } from './auth';
+import { userDataService } from './user-data-service';
 
 // Storage keys
 const DATABASES_STORAGE_KEY = 'storacha_databases';
@@ -220,6 +221,14 @@ class DatabaseService implements SyncedDatabaseServiceInterface {
 
     this.databases.set(id, manifest);
     await this.saveToStorage();
+
+    // Register with user data service
+    try {
+      await userDataService.initialize();
+      await userDataService.addDatabase(id, name, 'default', { icon });
+    } catch (error) {
+      console.error('Failed to register database with user data service:', error);
+    }
 
     this.emit('schema:updated', id, { schema });
 
@@ -1264,6 +1273,14 @@ class DatabaseService implements SyncedDatabaseServiceInterface {
       localStorage.setItem(DATABASES_SYNC_KEY, JSON.stringify(syncInfo));
 
       console.log(`Database ${databaseId} synced to Storacha with CID: ${manifestCid}`);
+      
+      // 6. Update user data service with new CID
+      try {
+        await userDataService.initialize();
+        await userDataService.updateDatabaseCid(databaseId, manifestCid);
+      } catch (error) {
+        console.error('Failed to update database CID in user data:', error);
+      }
       
       this.emit('sync:completed', databaseId, { cid: manifestCid });
       this.syncInProgress.delete(databaseId);

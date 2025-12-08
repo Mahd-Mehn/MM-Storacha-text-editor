@@ -9,15 +9,29 @@
   } from '$lib/types/database';
 
   // Props
-  export let schema: DatabaseSchema;
-  export let rows: DatabaseRow[];
-  export let view: DatabaseView;
-  export let groupedRows: Map<string, DatabaseRow[]>;
-  export let onRowClick: ((row: DatabaseRow) => void) | undefined = undefined;
-  export let onRowUpdate: ((rowId: string, propertyId: string, value: PropertyValue) => void) | undefined = undefined;
-  export let onAddRow: ((groupId?: string) => void) | undefined = undefined;
-  export let onDeleteRow: ((rowId: string) => void) | undefined = undefined;
-  export let readonly: boolean = false;
+  interface Props {
+    schema: DatabaseSchema;
+    rows: DatabaseRow[];
+    view: DatabaseView;
+    groupedRows: Map<string, DatabaseRow[]>;
+    onRowClick?: (row: DatabaseRow) => void;
+    onRowUpdate?: (rowId: string, propertyId: string, value: PropertyValue) => void;
+    onAddRow?: (groupId?: string) => void;
+    onDeleteRow?: (rowId: string) => void;
+    readonly?: boolean;
+  }
+  
+  let { 
+    schema, 
+    rows, 
+    view, 
+    groupedRows, 
+    onRowClick = undefined, 
+    onRowUpdate = undefined, 
+    onAddRow = undefined, 
+    onDeleteRow = undefined, 
+    readonly = false 
+  }: Props = $props();
 
   // State
   let draggedRow = $state<DatabaseRow | null>(null);

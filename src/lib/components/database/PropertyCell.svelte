@@ -2,12 +2,23 @@
   import type { PropertyDefinition, PropertyValue, SelectOption } from '$lib/types/database';
 
   // Props
-  export let property: PropertyDefinition;
-  export let value: PropertyValue | undefined;
-  export let editing: boolean = false;
-  export let readonly: boolean = false;
-  export let onUpdate: ((value: PropertyValue) => void) | undefined = undefined;
-  export let onBlur: (() => void) | undefined = undefined;
+  interface Props {
+    property: PropertyDefinition;
+    value?: PropertyValue;
+    editing?: boolean;
+    readonly?: boolean;
+    onUpdate?: (value: PropertyValue) => void;
+    onBlur?: () => void;
+  }
+  
+  let { 
+    property, 
+    value = undefined, 
+    editing = false, 
+    readonly = false, 
+    onUpdate = undefined, 
+    onBlur = undefined 
+  }: Props = $props();
 
   // State
   let inputElement: HTMLInputElement | HTMLTextAreaElement | null = null;

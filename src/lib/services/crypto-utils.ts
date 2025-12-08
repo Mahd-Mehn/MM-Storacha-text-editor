@@ -87,10 +87,10 @@ export class CryptoUtils {
     return crypto.subtle.encrypt(
       {
         name: 'AES-GCM',
-        iv
+        iv: iv as BufferSource
       },
       key,
-      data
+      data as BufferSource
     );
   }
 
@@ -105,7 +105,7 @@ export class CryptoUtils {
     return crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
-        iv
+        iv: iv as BufferSource
       },
       key,
       ciphertext
@@ -381,9 +381,9 @@ export class CryptoUtils {
 
     // Encrypt the content
     const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv as BufferSource },
       derivedKey,
-      content
+      content as BufferSource
     );
 
     return {
@@ -466,8 +466,8 @@ export class CryptoUtils {
   // Utility Methods
   // ============================================================================
 
-  arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
+  arrayBufferToBase64(buffer: ArrayBuffer | ArrayBufferLike): string {
+    const bytes = new Uint8Array(buffer as ArrayBuffer);
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]);
@@ -481,7 +481,7 @@ export class CryptoUtils {
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
     }
-    return bytes.buffer;
+    return bytes.buffer as ArrayBuffer;
   }
 
   /**

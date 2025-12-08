@@ -12,16 +12,31 @@
   import PropertyHeader from './PropertyHeader.svelte';
 
   // Props
-  export let schema: DatabaseSchema;
-  export let rows: DatabaseRow[];
-  export let view: DatabaseView;
-  export let onRowClick: ((row: DatabaseRow) => void) | undefined = undefined;
-  export let onRowUpdate: ((rowId: string, propertyId: string, value: PropertyValue) => void) | undefined = undefined;
-  export let onAddRow: (() => void) | undefined = undefined;
-  export let onDeleteRow: ((rowId: string) => void) | undefined = undefined;
-  export let onSortChange: ((sorts: SortRule[]) => void) | undefined = undefined;
-  export let onPropertyAdd: (() => void) | undefined = undefined;
-  export let readonly: boolean = false;
+  interface Props {
+    schema: DatabaseSchema;
+    rows: DatabaseRow[];
+    view: DatabaseView;
+    onRowClick?: (row: DatabaseRow) => void;
+    onRowUpdate?: (rowId: string, propertyId: string, value: PropertyValue) => void;
+    onAddRow?: () => void;
+    onDeleteRow?: (rowId: string) => void;
+    onSortChange?: (sorts: SortRule[]) => void;
+    onPropertyAdd?: () => void;
+    readonly?: boolean;
+  }
+  
+  let { 
+    schema, 
+    rows, 
+    view, 
+    onRowClick = undefined, 
+    onRowUpdate = undefined, 
+    onAddRow = undefined, 
+    onDeleteRow = undefined, 
+    onSortChange = undefined, 
+    onPropertyAdd = undefined, 
+    readonly = false 
+  }: Props = $props();
 
   // State
   let selectedRowIds = $state<Set<string>>(new Set());

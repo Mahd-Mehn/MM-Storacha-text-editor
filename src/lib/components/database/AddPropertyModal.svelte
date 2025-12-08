@@ -2,8 +2,12 @@
   import type { PropertyDefinition, PropertyType, SelectOption } from '$lib/types/database';
 
   // Props
-  export let onAdd: (property: PropertyDefinition) => void;
-  export let onClose: () => void;
+  interface Props {
+    onAdd: (property: PropertyDefinition) => void;
+    onClose: () => void;
+  }
+  
+  let { onAdd, onClose }: Props = $props();
 
   // State
   let name = $state('');

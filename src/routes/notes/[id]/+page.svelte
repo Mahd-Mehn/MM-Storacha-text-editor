@@ -8,7 +8,7 @@
   import { versionHistoryService } from '$lib/services/version-history.js';
   
   // Get note ID from route params
-  $: noteId = $page.params.id;
+  let noteId = $derived($page.params.id);
   
   // State
   let yjsDocument: Y.Doc | null = null;

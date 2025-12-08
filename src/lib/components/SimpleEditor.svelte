@@ -6,10 +6,19 @@
   import { Plugin, PluginKey } from '@tiptap/pm/state';
 
   // Props
-  export let content: string = "";
-  export let editable: boolean = true;
-  export let placeholder: string = "Type '/' for commands...";
-  export let onUpdate: ((content: string) => void) | undefined = undefined;
+  interface Props {
+    content?: string;
+    editable?: boolean;
+    placeholder?: string;
+    onUpdate?: (content: string) => void;
+  }
+  
+  let { 
+    content = "", 
+    editable = true, 
+    placeholder = "Type '/' for commands...", 
+    onUpdate 
+  }: Props = $props();
 
   // Editor instance
   let editor: Editor | null = null;

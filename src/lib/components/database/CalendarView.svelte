@@ -8,12 +8,23 @@
   } from '$lib/types/database';
 
   // Props
-  export let schema: DatabaseSchema;
-  export let rows: DatabaseRow[];
-  export let view: DatabaseView;
-  export let onRowClick: ((row: DatabaseRow) => void) | undefined = undefined;
-  export let onAddRow: ((date?: string) => void) | undefined = undefined;
-  export let readonly: boolean = false;
+  interface Props {
+    schema: DatabaseSchema;
+    rows: DatabaseRow[];
+    view: DatabaseView;
+    onRowClick?: (row: DatabaseRow) => void;
+    onAddRow?: (date?: string) => void;
+    readonly?: boolean;
+  }
+  
+  let { 
+    schema, 
+    rows, 
+    view, 
+    onRowClick = undefined, 
+    onAddRow = undefined, 
+    readonly = false 
+  }: Props = $props();
 
   // State
   let currentDate = $state(new Date());

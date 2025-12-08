@@ -2,12 +2,23 @@
   import type { PropertyDefinition } from '$lib/types/database';
 
   // Props
-  export let property: PropertyDefinition;
-  export let sortDirection: 'asc' | 'desc' | null = null;
-  export let onSort: (() => void) | undefined = undefined;
-  export let onRename: ((name: string) => void) | undefined = undefined;
-  export let onDelete: (() => void) | undefined = undefined;
-  export let onHide: (() => void) | undefined = undefined;
+  interface Props {
+    property: PropertyDefinition;
+    sortDirection?: 'asc' | 'desc' | null;
+    onSort?: () => void;
+    onRename?: (name: string) => void;
+    onDelete?: () => void;
+    onHide?: () => void;
+  }
+  
+  let { 
+    property, 
+    sortDirection = null, 
+    onSort = undefined, 
+    onRename = undefined, 
+    onDelete = undefined, 
+    onHide = undefined 
+  }: Props = $props();
 
   // State
   let showMenu = $state(false);

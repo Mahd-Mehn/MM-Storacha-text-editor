@@ -51,3 +51,13 @@ export { DatabaseService, databaseService } from './database-service';
 
 // Share service
 export { ShareService, shareService } from './share-service';
+
+// User data service (global user database)
+export { userDataService } from './user-data-service';
+export type { 
+  UserData, 
+  WorkspaceData, 
+  PageReference, 
+  DatabaseReference, 
+  ContentReference 
+} from './user-data-service';
