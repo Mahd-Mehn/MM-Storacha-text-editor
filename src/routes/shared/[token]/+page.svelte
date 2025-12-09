@@ -7,7 +7,7 @@
   import { Database } from '$lib/components/database';
 
   // Get token from route params
-  let token = $derived($page.params.token);
+  let token = $derived($page.params.token ?? '');
   
   // State
   let loading = $state(true);

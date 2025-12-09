@@ -1,12 +1,12 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import type { DatabaseRow, DatabaseManifest, PropertyValue } from '$lib/types/database';
+  import type { DatabaseRow, DatabaseManifest, PropertyValue, PropertyType } from '$lib/types/database';
   import { databaseService } from '$lib/services/database-service';
   import { Database } from '$lib/components/database';
 
   // Get database ID from route params
-  let databaseId = $derived($page.params.id);
+  let databaseId = $derived($page.params.id ?? '');
   
   // State
   let manifest = $state<DatabaseManifest | null>(null);
@@ -15,7 +15,52 @@
   let selectedRow = $state<DatabaseRow | null>(null);
   let showRowEditor = $state(false);
 
+  // Helper functions
+  function getPropertyIcon(type: PropertyType): string {
+    switch (type) {
+      case 'text': return 'Aa';
+      case 'number': return '#';
+      case 'date': return '📅';
+      case 'checkbox': return '☑';
+      case 'select': return '▼';
+      case 'multiSelect': return '⊞';
+      case 'url': return '🔗';
+      case 'email': return '✉';
+      case 'phone': return '📞';
+      case 'createdTime': return '🕐';
+      case 'lastEditedTime': return '🕐';
+      default: return '•';
+    }
+  }
+  
+  async function updateProperty(propertyId: string, value: PropertyValue) {
+    if (!selectedRow) return;
+
+    await databaseService.updateRow(selectedRow.id, { [propertyId]: value });
+    
+    // Refresh the row
+    const updatedRow = await databaseService.getRow(selectedRow.id);
+    if (updatedRow) {
+      selectedRow = updatedRow;
+    }
+  }
+
+  async function deleteCurrentRow() {
+    if (!selectedRow) return;
+
+    if (confirm('Are you sure you want to delete this entry?')) {
+      await databaseService.deleteRow(selectedRow.id);
+      closeRowEditor();
+    }
+  }
+
   async function loadDatabase() {
+    if (!databaseId) {
+      error = 'No database ID provided';
+      loading = false;
+      return;
+    }
+    
     loading = true;
     error = null;
 
@@ -174,48 +219,6 @@
     </div>
   </div>
 {/if}
-
-<script context="module" lang="ts">
-  import type { PropertyValue, PropertyType } from '$lib/types/database';
-
-  function getPropertyIcon(type: PropertyType): string {
-    switch (type) {
-      case 'text': return 'Aa';
-      case 'number': return '#';
-      case 'date': return '📅';
-      case 'checkbox': return '☑';
-      case 'select': return '▼';
-      case 'multiSelect': return '⊞';
-      case 'url': return '🔗';
-      case 'email': return '✉';
-      case 'phone': return '📞';
-      case 'createdTime': return '🕐';
-      case 'lastEditedTime': return '🕐';
-      default: return '•';
-    }
-  }
-  
-  async function updateProperty(propertyId: string, value: PropertyValue) {
-    if (!selectedRow) return;
-
-    await databaseService.updateRow(selectedRow.id, { [propertyId]: value });
-    
-    // Refresh the row
-    const updatedRow = await databaseService.getRow(selectedRow.id);
-    if (updatedRow) {
-      selectedRow = updatedRow;
-    }
-  }
-
-  async function deleteCurrentRow() {
-    if (!selectedRow) return;
-
-    if (confirm('Are you sure you want to delete this entry?')) {
-      await databaseService.deleteRow(selectedRow.id);
-      closeRowEditor();
-    }
-  }
-</script>
 
 <style>
   .database-page {

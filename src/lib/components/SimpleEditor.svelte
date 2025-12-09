@@ -168,9 +168,11 @@
     document.removeEventListener('click', handleClickOutside);
   });
 
-  $: if (editor && editor.isEditable !== editable) {
-    editor.setEditable(editable);
-  }
+  $effect(() => {
+    if (editor && editor.isEditable !== editable) {
+      editor.setEditable(editable);
+    }
+  });
 </script>
 
 <div class="rich-text-editor">
