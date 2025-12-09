@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
+import { userDataService } from '$lib/services/user-data-service';
 
 export interface Page {
   id: string;
@@ -11,6 +12,7 @@ export interface Page {
   children: Page[];
   createdAt: number;
   updatedAt: number;
+  storachaCID?: string; // Link to content on Storacha
 }
 
 export interface Workspace {
@@ -147,9 +149,12 @@ function createWorkspaceStateStore() {
   return {
     subscribe,
     set,
+    update,
     
     // Create a new page
     createPage: (title: string, icon: string, type: 'folder' | 'file', parentId?: string) => {
+      let createdPage: Page | null = null;
+      
       update(state => {
         const newPage: Page = {
           id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -161,6 +166,8 @@ function createWorkspaceStateStore() {
           createdAt: Date.now(),
           updatedAt: Date.now()
         };
+        
+        createdPage = newPage;
 
         if (parentId) {
           // Add to parent's children
@@ -193,6 +200,11 @@ function createWorkspaceStateStore() {
           };
         }
       });
+      
+      // Sync to user data service (async, don't await)
+      if (createdPage && browser) {
+        syncPageToUserData(createdPage, 'default').catch(console.error);
+      }
     },
 
     // Rename a page
@@ -235,6 +247,11 @@ function createWorkspaceStateStore() {
         },
         selectedPageId: state.selectedPageId === id ? null : state.selectedPageId
       }));
+      
+      // Sync deletion to user data service
+      if (browser) {
+        removePageFromUserData(id).catch(console.error);
+      }
     },
 
     // Toggle expanded state
@@ -264,6 +281,81 @@ function createWorkspaceStateStore() {
 }
 
 export const workspaceState = createWorkspaceStateStore();
+
+// Sync page to user data service
+async function syncPageToUserData(page: Page, workspaceId: string): Promise<void> {
+  if (!browser) return;
+  
+  try {
+    await userDataService.initialize();
+    await userDataService.addPage(
+      page.id,
+      page.title,
+      workspaceId,
+      {
+        icon: page.icon,
+        isFolder: page.type === 'folder',
+        parentId: page.parentId,
+        cid: page.storachaCID
+      }
+    );
+  } catch (error) {
+    console.error('Failed to sync page to user data:', error);
+  }
+}
+
+// Remove page from user data service
+async function removePageFromUserData(pageId: string): Promise<void> {
+  if (!browser) return;
+  
+  try {
+    await userDataService.initialize();
+    await userDataService.removeContent(pageId);
+  } catch (error) {
+    console.error('Failed to remove page from user data:', error);
+  }
+}
+
+// Update page CID in user data
+export async function updatePageStorachaCID(pageId: string, cid: string): Promise<void> {
+  if (!browser) return;
+  
+  try {
+    await userDataService.initialize();
+    await userDataService.updatePageCid(pageId, cid);
+    
+    // Also update local state
+    workspaceState.update((state) => ({
+      ...state,
+      workspace: {
+        ...state.workspace,
+        pages: updatePageInTreeHelper(state.workspace.pages, pageId, (page) => ({
+          ...page,
+          storachaCID: cid,
+          updatedAt: Date.now()
+        }))
+      }
+    }));
+  } catch (error) {
+    console.error('Failed to update page CID:', error);
+  }
+}
+
+// Helper for updating pages in tree (exported for use in updatePageStorachaCID)
+function updatePageInTreeHelper(pages: Page[], id: string, updater: (page: Page) => Page): Page[] {
+  return pages.map(page => {
+    if (page.id === id) {
+      return updater(page);
+    }
+    if (page.children.length > 0) {
+      return {
+        ...page,
+        children: updatePageInTreeHelper(page.children, id, updater)
+      };
+    }
+    return page;
+  });
+}
 
 // Legacy exports for backward compatibility
 export const workspaceStore = derived(workspaceState, $state => $state.workspace);

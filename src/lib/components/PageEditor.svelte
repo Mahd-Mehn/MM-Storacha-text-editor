@@ -72,7 +72,7 @@
   function handleDragLeave(e: DragEvent) {
     // Only clear if leaving the block entirely
     const relatedTarget = e.relatedTarget as HTMLElement;
-    if (!relatedTarget || !e.currentTarget?.contains(relatedTarget)) {
+    if (!relatedTarget || !(e.currentTarget as HTMLElement)?.contains(relatedTarget)) {
       dropTargetId = null;
       dropPosition = null;
     }
@@ -112,7 +112,7 @@
       blockId: draggedBlockId,
       targetParentId: null,
       targetPageId: pageId,
-      insertAfter: insertAfter
+      insertAfter: insertAfter ?? undefined
     });
     
     // Refresh blocks
@@ -139,7 +139,7 @@
       id: wp.id,
       title: wp.title,
       type: 'page',
-      icon: wp.icon,
+      icon: wp.icon ? { type: 'emoji', value: wp.icon } : undefined,
       cover: wp.cover ? { type: 'image', value: wp.cover } : undefined,
       parentId: wp.parentId ?? null,
       workspaceId: 'default',

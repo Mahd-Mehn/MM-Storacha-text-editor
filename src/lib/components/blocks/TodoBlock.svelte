@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Block } from '$lib/types/blocks';
+  import type { Block, RichTextSegment } from '$lib/types/blocks';
 
   let { 
     block, 
@@ -27,7 +27,7 @@
 
   onMount(() => {
     if (editorElement) {
-      const text = block.properties.textContent?.map(s => s.text).join('') || '';
+      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
       editorElement.innerText = text;
       lastBlockId = block.id;
     }
@@ -35,7 +35,7 @@
 
   $effect(() => {
     if (editorElement && block.id !== lastBlockId) {
-      const text = block.properties.textContent?.map(s => s.text).join('') || '';
+      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
       editorElement.innerText = text;
       lastBlockId = block.id;
     }

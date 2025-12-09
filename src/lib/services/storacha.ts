@@ -2,10 +2,12 @@ import type { Client } from '@storacha/client'
 import type { StoredNoteData } from '../types/index.js'
 import { authService } from './auth.js'
 import { spaceService } from './space.js'
+import * as DelegationModule from '@storacha/client/delegation'
 
 /**
  * Storacha Storage Client Service
- * Handles content upload, retrieval, and CID management for decentralized storage
+ * Handles content upload, retrieval, CID management, and UCAN delegations
+ * for decentralized storage
  * Requirements: 2.1, 2.4 - Auto-save to decentralized storage without centralized servers
  */
 export class StorachaClient {
@@ -287,6 +289,190 @@ export class StorachaClient {
       currentSpace: this.getCurrentSpaceDID(),
       clientReady: this.isReady()
     }
+  }
+
+  /**
+   * Create a UCAN delegation for a specific audience with given abilities
+   * Uses the @storacha/client createDelegation API
+   * 
+   * @param audienceDID - The DID of the recipient (e.g., did:key:z6Mk...)
+   * @param abilities - Array of abilities to delegate (e.g., ['space/blob/add', 'upload/add'])
+   * @param options - Optional expiration and proofs
+   * @returns Serialized delegation as Uint8Array (CAR format)
+   */
+  async createDelegation(
+    audienceDID: string,
+    abilities: string[],
+    options?: {
+      expiration?: number; // Unix timestamp in seconds
+      lifetimeInSeconds?: number; // Alternative to expiration
+    }
+  ): Promise<Uint8Array> {
+    if (!this.client) {
+      throw new Error('Storacha client not initialized')
+    }
+
+    const currentSpace = this.client.currentSpace()
+    if (!currentSpace) {
+      throw new Error('No space available for delegation')
+    }
+
+    try {
+      // Parse the audience DID using @ipld/dag-ucan
+      // The client.createDelegation expects a Principal
+      const { parse } = await import('@ipld/dag-ucan/did')
+      const audience = parse(audienceDID)
+
+      // Calculate expiration
+      let expiration: number | undefined
+      if (options?.expiration) {
+        expiration = options.expiration
+      } else if (options?.lifetimeInSeconds) {
+        expiration = Math.floor(Date.now() / 1000) + options.lifetimeInSeconds
+      } else {
+        // Default: 24 hours
+        expiration = Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+      }
+
+      // Create the delegation using Storacha client API
+      const delegation = await this.client.createDelegation(
+        audience,
+        abilities as any, // Type assertion needed due to strict typing
+        { expiration }
+      )
+
+      // Archive the delegation to a CAR file format
+      const archive = await delegation.archive()
+      if (archive.error) {
+        throw new Error(`Failed to archive delegation: ${archive.error}`)
+      }
+
+      console.log('Created delegation:', {
+        issuer: delegation.issuer.did(),
+        audience: delegation.audience.did(),
+        capabilities: delegation.capabilities,
+        expiration: delegation.expiration
+      })
+
+      return archive.ok
+    } catch (error) {
+      console.error('Failed to create delegation:', error)
+      throw new Error(`Failed to create delegation: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Accept a delegation from another user
+   * Adds the delegation as a proof to the local agent
+   * 
+   * @param delegationBytes - The serialized delegation (CAR format)
+   * @returns The space DID from the delegation
+   */
+  async acceptDelegation(delegationBytes: Uint8Array): Promise<string> {
+    if (!this.client) {
+      throw new Error('Storacha client not initialized')
+    }
+
+    try {
+      // Import the Delegation extraction utility
+      const { extract } = await import('@storacha/client/delegation')
+      
+      // Extract the delegation from the CAR bytes
+      const result = await extract(delegationBytes)
+      if (result.error) {
+        throw new Error(`Failed to extract delegation: ${result.error}`)
+      }
+
+      const delegation = result.ok
+
+      // Add the delegation as a space (this also adds it as a proof)
+      const space = await this.client.addSpace(delegation)
+      
+      console.log('Accepted delegation for space:', {
+        spaceDID: space.did(),
+        spaceName: space.name
+      })
+
+      return space.did()
+    } catch (error) {
+      console.error('Failed to accept delegation:', error)
+      throw new Error(`Failed to accept delegation: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Get all delegations created by this agent
+   * Optionally filtered by capability
+   */
+  getDelegations(abilities?: string[]): any[] {
+    if (!this.client) {
+      return []
+    }
+
+    try {
+      // Get delegations, optionally filtered
+      if (abilities && abilities.length > 0) {
+        // Filter by capabilities
+        const allDelegations = this.client.delegations()
+        return allDelegations.filter(d => 
+          d.capabilities.some(cap => abilities.includes(cap.can))
+        )
+      }
+      
+      return this.client.delegations()
+    } catch (error) {
+      console.error('Failed to get delegations:', error)
+      return []
+    }
+  }
+
+  /**
+   * Create a delegation for database/note sharing
+   * Provides common ability sets for different permission levels
+   */
+  async createShareDelegation(
+    audienceDID: string,
+    permission: 'view' | 'edit' | 'admin',
+    options?: { lifetimeInSeconds?: number }
+  ): Promise<Uint8Array> {
+    // Map permission levels to Storacha abilities
+    const abilityMap: Record<string, string[]> = {
+      view: [
+        'space/blob/list',
+        'upload/list'
+      ],
+      edit: [
+        'space/blob/add',
+        'space/blob/list',
+        'space/index/add',
+        'upload/add',
+        'upload/list',
+        'filecoin/offer'
+      ],
+      admin: [
+        'space/blob/add',
+        'space/blob/list',
+        'space/blob/remove',
+        'space/index/add',
+        'upload/add',
+        'upload/list',
+        'upload/remove',
+        'filecoin/offer',
+        'filecoin/info'
+      ]
+    }
+
+    const abilities = abilityMap[permission] || abilityMap.view
+
+    return this.createDelegation(audienceDID, abilities, options)
+  }
+
+  /**
+   * Get the agent's DID (Decentralized Identifier)
+   */
+  getAgentDID(): string | null {
+    if (!this.client) return null
+    return this.client.agent.did()
   }
 }
 

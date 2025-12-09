@@ -19,12 +19,15 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div 
   class="block-wrapper"
   class:selected={isSelected}
   tabindex="0"
   onkeydown={handleKeydown}
   role="separator"
+  aria-label="Divider block - press Delete to remove"
 >
   <div class="block-actions">
     <button class="action-btn drag-handle" title="Drag to move">

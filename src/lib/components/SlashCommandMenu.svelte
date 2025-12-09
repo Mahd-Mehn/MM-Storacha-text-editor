@@ -10,7 +10,7 @@
 
   let { isOpen = false, position = { x: 0, y: 0 }, onSelect, onClose }: Props = $props();
 
-  let menuRef: HTMLElement;
+  let menuRef = $state<HTMLElement | null>(null);
   let selectedIndex = $state(0);
   let searchQuery = $state('');
 

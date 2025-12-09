@@ -107,7 +107,7 @@
     class:selected={isSelected}
     style="padding-left: {level * 1.25 + 0.5}rem"
     onclick={handleClick}
-    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick(e)}
+    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleClick()}
     oncontextmenu={handleContextMenu}
     onmouseenter={() => (isHovered = true)}
     onmouseleave={() => (isHovered = false)}
