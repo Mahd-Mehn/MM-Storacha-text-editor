@@ -1,9 +1,16 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { Block, RichTextSegment } from '$lib/types/blocks';
+  import type { Doc as YDoc, Text as YText } from 'yjs';
+  import {
+    ensureYTextSeededFromPlainText,
+    overwriteYText,
+    setInnerTextPreserveCaret
+  } from '$lib/utils/yjs-contenteditable';
 
   let { 
     block, 
+    pageYDoc,
     editable = true, 
     isSelected = false,
     onChange,
@@ -12,6 +19,7 @@
     onFocus
   } = $props<{
     block: Block;
+    pageYDoc?: YDoc;
     editable?: boolean;
     isSelected?: boolean;
     onChange?: (content: any) => void;
@@ -23,20 +31,76 @@
   let editorElement: HTMLElement;
   let lastBlockId = '';
 
+  let ytext: YText | null = null;
+  let ytextUnobserve: (() => void) | null = null;
+
+  function localPlainText(): string {
+    return block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
+  }
+
+  function bindToYText(): void {
+    try {
+      ytextUnobserve?.();
+    } catch {
+      // ignore
+    }
+    ytextUnobserve = null;
+    ytext = null;
+
+    if (!editorElement) return;
+    if (!pageYDoc) return;
+
+    const ytextLocal = pageYDoc.getText(`block:${block.id}`);
+    ytext = ytextLocal;
+    ensureYTextSeededFromPlainText(ytextLocal, localPlainText());
+    setInnerTextPreserveCaret(editorElement, ytextLocal.toString());
+
+    const observer = () => {
+      if (!editorElement) return;
+      const next = ytextLocal.toString();
+      if (editorElement.innerText !== next) {
+        setInnerTextPreserveCaret(editorElement, next);
+      }
+      onChange?.({ textContent: [{ text: next }] });
+    };
+
+    ytextLocal.observe(observer);
+    ytextUnobserve = () => ytextLocal.unobserve(observer);
+  }
+
   onMount(() => {
     if (editorElement) {
-      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
+      const text = localPlainText();
       editorElement.innerText = text;
       lastBlockId = block.id;
+      bindToYText();
     }
   });
 
   $effect(() => {
     if (editorElement && block.id !== lastBlockId) {
-      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
+      const text = localPlainText();
       editorElement.innerText = text;
       lastBlockId = block.id;
+      bindToYText();
     }
+  });
+
+  $effect(() => {
+    if (editorElement) {
+      void pageYDoc;
+      bindToYText();
+    }
+  });
+
+  onDestroy(() => {
+    try {
+      ytextUnobserve?.();
+    } catch {
+      // ignore
+    }
+    ytextUnobserve = null;
+    ytext = null;
   });
 
   function handleKeydown(event: KeyboardEvent) {
@@ -52,6 +116,10 @@
   function handleInput(event: Event) {
     const target = event.target as HTMLElement;
     const text = target.innerText;
+
+    if (pageYDoc && ytext) {
+      pageYDoc.transact(() => overwriteYText(ytext, text));
+    }
     onChange?.({
       textContent: [{ text }]
     });

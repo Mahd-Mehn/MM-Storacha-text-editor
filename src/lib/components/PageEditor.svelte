@@ -6,6 +6,13 @@
   import { get } from 'svelte/store';
   import type { Page } from '$lib/types/pages';
   import type { Block, BlockType } from '$lib/types/blocks';
+  import * as Y from 'yjs';
+  import {
+    createWebrtcCollaborationSession,
+    getOrCreateLocalCollaborationUser,
+    type CollaborationUser,
+    type WebrtcCollaborationSession
+  } from '$lib/services/collaboration-sync';
   import ParagraphBlock from './blocks/ParagraphBlock.svelte';
   import HeadingBlock from './blocks/HeadingBlock.svelte';
   import TodoBlock from './blocks/TodoBlock.svelte';
@@ -23,6 +30,11 @@
   let page = $state<Page | undefined>(undefined);
   let blocks = $state<Block[]>([]);
   let loading = $state(true);
+
+  // Realtime collaboration (page-level, shared across all blocks)
+  let pageYDoc = $state<Y.Doc | null>(null);
+  let collabUser = $state<CollaborationUser | null>(null);
+  let collabSession = $state<WebrtcCollaborationSession | null>(null);
   
   // Slash command menu state
   let showSlashMenu = $state(false);
@@ -36,8 +48,58 @@
 
   // Cleanup on destroy
   onDestroy(() => {
+    try {
+      collabSession?.destroy();
+    } catch {
+      // ignore
+    }
+    collabSession = null;
+
+    try {
+      pageYDoc?.destroy();
+    } catch {
+      // ignore
+    }
+    pageYDoc = null;
+
     // Flush any pending saves before unmounting
     blockManager.flushSave();
+  });
+
+  function roomForPage(id: string): string {
+    return `page:${id}`;
+  }
+
+  async function startCollaboration(doc: Y.Doc) {
+    if (!pageId) return;
+    if (!collabUser) return;
+
+    try {
+      collabSession?.destroy();
+    } catch {
+      // ignore
+    }
+    collabSession = null;
+
+    try {
+      collabSession = await createWebrtcCollaborationSession({
+        room: roomForPage(pageId),
+        doc,
+        user: collabUser
+      });
+    } catch (e) {
+      console.warn('Failed to start page collaboration session:', e);
+    }
+  }
+
+  onMount(() => {
+    // Local user profile for presence (future cursor UX)
+    collabUser = getOrCreateLocalCollaborationUser('collaboration:user');
+
+    // Create page doc and start realtime provider
+    const doc = new Y.Doc();
+    pageYDoc = doc;
+    void startCollaboration(doc);
   });
 
   // Drag & drop handlers
@@ -434,6 +496,7 @@
             {#if block.type === 'paragraph'}
               <ParagraphBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id)}
                 onDelete={() => deleteBlock(block.id)}
@@ -442,6 +505,7 @@
             {:else if block.type === 'heading1' || block.type === 'heading2' || block.type === 'heading3'}
               <HeadingBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id)}
                 onDelete={() => deleteBlock(block.id)}
@@ -449,6 +513,7 @@
             {:else if block.type === 'todo'}
               <TodoBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id, 'todo')}
                 onDelete={() => deleteBlock(block.id)}
@@ -456,6 +521,7 @@
             {:else if block.type === 'toggle'}
               <ToggleBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id)}
                 onDelete={() => deleteBlock(block.id)}
@@ -463,6 +529,7 @@
             {:else if block.type === 'quote'}
               <QuoteBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id)}
                 onDelete={() => deleteBlock(block.id)}
@@ -470,6 +537,7 @@
             {:else if block.type === 'callout'}
               <CalloutBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id)}
                 onDelete={() => deleteBlock(block.id)}
@@ -477,6 +545,7 @@
             {:else if block.type === 'code'}
               <CodeBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onDelete={() => deleteBlock(block.id)}
               />
@@ -488,6 +557,7 @@
             {:else if block.type === 'bulletList'}
               <BulletListBlock 
                 {block} 
+                pageYDoc={pageYDoc ?? undefined}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id, 'bulletList')}
                 onDelete={() => deleteBlock(block.id)}
@@ -495,6 +565,7 @@
             {:else if block.type === 'numberedList'}
               <NumberedListBlock 
                 {block}
+                pageYDoc={pageYDoc ?? undefined}
                 index={getNumberedListIndex(blocks, index)}
                 onChange={(content) => handleBlockChange(block.id, content)}
                 onEnter={() => addBlock(block.id, 'numberedList')}

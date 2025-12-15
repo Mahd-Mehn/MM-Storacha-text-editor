@@ -31,6 +31,17 @@ export { LocalStorageManager, localStorageManager } from './local-storage';
 // Hybrid storage service
 export { HybridStorageService, hybridStorageService } from './hybrid-storage';
 
+// Realtime collaboration (Yjs providers)
+export {
+  createWebrtcCollaborationSession,
+  getOrCreateLocalCollaborationUser
+} from './collaboration-sync';
+export type {
+  CollaborationUser,
+  CollaborationPeer,
+  WebrtcCollaborationSession
+} from './collaboration-sync';
+
 // Note management service
 export { NoteManager, noteManager } from './note-manager';
 

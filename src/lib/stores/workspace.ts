@@ -30,6 +30,19 @@ interface WorkspaceState {
 
 const STORAGE_KEY = 'workspace-state-v2';
 
+function generateWorkspacePageId(): string {
+  try {
+    const randomUUID = globalThis.crypto?.randomUUID;
+    if (typeof randomUUID === 'function') {
+      return `page_${randomUUID()}`;
+    }
+  } catch {
+    // ignore
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
 // Load initial state from localStorage
 function loadInitialState(): WorkspaceState {
   if (browser) {
@@ -152,12 +165,12 @@ function createWorkspaceStateStore() {
     update,
     
     // Create a new page
-    createPage: (title: string, icon: string, type: 'folder' | 'file', parentId?: string) => {
+    createPage: (title: string, icon: string, type: 'folder' | 'file', parentId?: string): Page | null => {
       let createdPage: Page | null = null;
       
       update(state => {
         const newPage: Page = {
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: generateWorkspacePageId(),
           title,
           icon,
           type,
@@ -205,6 +218,8 @@ function createWorkspaceStateStore() {
       if (createdPage && browser) {
         syncPageToUserData(createdPage, 'default').catch(console.error);
       }
+
+      return createdPage;
     },
 
     // Rename a page

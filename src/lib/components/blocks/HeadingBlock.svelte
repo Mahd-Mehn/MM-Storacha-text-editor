@@ -1,9 +1,16 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { Block, RichTextSegment } from '$lib/types/blocks';
+  import type { Doc as YDoc, Text as YText } from 'yjs';
+  import {
+    ensureYTextSeededFromPlainText,
+    overwriteYText,
+    setInnerTextPreserveCaret
+  } from '$lib/utils/yjs-contenteditable';
 
   let { 
     block, 
+    pageYDoc,
     editable = true, 
     isSelected = false,
     onChange,
@@ -11,6 +18,7 @@
     onDelete
   } = $props<{
     block: Block;
+    pageYDoc?: YDoc;
     editable?: boolean;
     isSelected?: boolean;
     onChange?: (content: any) => void;
@@ -21,6 +29,43 @@
   let editorElement: HTMLElement;
   let lastBlockId = '';
 
+  let ytext: YText | null = null;
+  let ytextUnobserve: (() => void) | null = null;
+
+  function localPlainText(): string {
+    return block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
+  }
+
+  function bindToYText(): void {
+    try {
+      ytextUnobserve?.();
+    } catch {
+      // ignore
+    }
+    ytextUnobserve = null;
+    ytext = null;
+
+    if (!editorElement) return;
+    if (!pageYDoc) return;
+
+    const ytextLocal = pageYDoc.getText(`block:${block.id}`);
+    ytext = ytextLocal;
+    ensureYTextSeededFromPlainText(ytextLocal, localPlainText());
+    setInnerTextPreserveCaret(editorElement, ytextLocal.toString());
+
+    const observer = () => {
+      if (!editorElement) return;
+      const next = ytextLocal.toString();
+      if (editorElement.innerText !== next) {
+        setInnerTextPreserveCaret(editorElement, next);
+      }
+      onChange?.({ textContent: [{ text: next }] });
+    };
+
+    ytextLocal.observe(observer);
+    ytextUnobserve = () => ytextLocal.unobserve(observer);
+  }
+
   // Determine heading level
   let level = $derived(block.properties.level || 1);
   let placeholder = $derived(level === 1 ? 'Heading 1' : level === 2 ? 'Heading 2' : 'Heading 3');
@@ -28,24 +73,47 @@
   // Set initial content when component mounts
   onMount(() => {
     if (editorElement) {
-      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
+      const text = localPlainText();
       editorElement.innerText = text;
       lastBlockId = block.id;
+      bindToYText();
     }
   });
 
   // Update content when block.id changes (switching to different block)
   $effect(() => {
     if (editorElement && block.id !== lastBlockId) {
-      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
+      const text = localPlainText();
       editorElement.innerText = text;
       lastBlockId = block.id;
+      bindToYText();
     }
+  });
+
+  $effect(() => {
+    if (editorElement) {
+      void pageYDoc;
+      bindToYText();
+    }
+  });
+
+  onDestroy(() => {
+    try {
+      ytextUnobserve?.();
+    } catch {
+      // ignore
+    }
+    ytextUnobserve = null;
+    ytext = null;
   });
 
   function handleInput(event: Event) {
     const target = event.target as HTMLElement;
     const text = target.innerText;
+
+    if (pageYDoc && ytext) {
+      pageYDoc.transact(() => overwriteYText(ytext, text));
+    }
     
     onChange?.({
       textContent: [{ text }]
