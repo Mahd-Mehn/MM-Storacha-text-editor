@@ -419,7 +419,24 @@
     min-width: 0;
     overflow: hidden;
     margin-left: 260px;
+    transition: margin-left 0.3s ease;
     position: relative;
+  }
+
+  @media (max-width: 768px) {
+    .main-content-wrapper {
+      margin-left: 0;
+    }
+  }
+
+  :global(body.sidebar-collapsed) .main-content-wrapper {
+    margin-left: 70px;
+  }
+
+  @media (max-width: 768px) {
+    :global(body.sidebar-collapsed) .main-content-wrapper {
+      margin-left: 0;
+    }
   }
 
   .email-banner {

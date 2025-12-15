@@ -105,6 +105,20 @@
     console.log("Search:", searchQuery);
   }
 
+  // Update body class for sidebar state
+  $effect(() => {
+    if (typeof document === "undefined") return;
+    if (isCollapsed) {
+      document.body.classList.add("sidebar-collapsed");
+    } else {
+      document.body.classList.remove("sidebar-collapsed");
+    }
+
+    return () => {
+      document.body.classList.remove("sidebar-collapsed");
+    };
+  });
+
   function navigateToSettings() {
     closeDropdowns();
     goto("/settings");
@@ -371,6 +385,31 @@
           </svg>
           <span>Calendar</span>
         </a>
+
+        <a href="/settings" class="nav-item">
+          <svg
+            class="nav-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+          >
+            <circle
+              cx="9"
+              cy="9"
+              r="2"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="M9 1v2M9 15v2M17 9h-2M3 9H1M14.5 3.5l-1.4 1.4M4.9 13.1l-1.4 1.4M14.5 14.5l-1.4-1.4M4.9 4.9L3.5 3.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>Settings</span>
+        </a>
       </nav>
     </div>
 
@@ -501,12 +540,17 @@
     border-right: 1px solid var(--border-color, #e5e7eb);
     display: flex;
     flex-direction: column;
-    transition: width 0.2s ease;
-    z-index: 100;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    overflow-x: hidden;
   }
 
   .sidebar.collapsed {
-    width: 60px;
+    width: 70px;
+  }
+
+  .sidebar.collapsed .workspace-icon {
+    margin: 0 auto;
   }
 
   .sidebar.collapsed .workspace-info,
@@ -514,10 +558,44 @@
   .sidebar.collapsed .chevron,
   .sidebar.collapsed .search-box input,
   .sidebar.collapsed .shortcut,
-  .sidebar.collapsed .section-header,
+  .sidebar.collapsed .section-header span,
   .sidebar.collapsed .nav-item span,
-  .sidebar.collapsed .user-info {
+  .sidebar.collapsed .user-info,
+  .sidebar.collapsed .add-button {
     display: none;
+  }
+
+  .sidebar.collapsed .workspace-selector {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar.collapsed .search-container {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .sidebar.collapsed .search-box {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar.collapsed .nav-items {
+    padding: 0 0.25rem;
+  }
+
+  .sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .sidebar.collapsed .user-profile {
+    justify-content: center;
+    padding: 1rem 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .sidebar.collapsed .section-header {
+    justify-content: center;
   }
 
   /* Workspace Header */
@@ -1109,5 +1187,33 @@
 
   .nav-sections::-webkit-scrollbar-thumb:hover {
     background: var(--text-tertiary, #9ca3af);
+  }
+
+  /* Mobile Responsive */
+  @media (max-width: 768px) {
+    .sidebar {
+      transform: translateX(-100%);
+    }
+
+    .sidebar:not(.collapsed) {
+      transform: translateX(0);
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .sidebar-toggle {
+      display: flex;
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      right: auto;
+      z-index: 1001;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-md);
+    }
+
+    .sidebar:not(.collapsed) + .sidebar-toggle {
+      left: 270px;
+    }
   }
 </style>
