@@ -337,6 +337,13 @@ export class UCANAuthService implements AuthService {
   getCurrentDID(): string | null {
     return this.authState.did
   }
+
+  /**
+   * Get current user's DID - alias for getCurrentDID for compatibility
+   */
+  getDID(): string | null {
+    return this.getCurrentDID()
+  }
 }
 
 // Export singleton instance

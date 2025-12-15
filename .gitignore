@@ -23,5 +23,5 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .kiro/
 DEPLOYMENT.md
-SETUP.md
-QUICKSTART.md
+IMPROVEMENTS.md
+OPTIMIZATIONS.md

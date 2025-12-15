@@ -317,3 +317,33 @@ export interface NoteManagerInterface {
 
 // Export auth types
 export * from './auth.js'
+
+// Export block types
+export * from './blocks.js'
+
+// Export page and workspace types (excluding types that conflict with database.ts)
+export type {
+  PageType,
+  PageIcon,
+  PageCover,
+  PageMetadata,
+  Page,
+  PageTreeNode,
+  DatabaseEntry,
+  Workspace,
+  WorkspaceMember,
+  WorkspaceSettings,
+  SerializedPage,
+  StoredPageData,
+  SerializedWorkspace,
+  CreatePageInput,
+  UpdatePageInput,
+  MovePageInput,
+  CreateWorkspaceInput,
+  Filter,
+  Sort,
+  SortDirection
+} from './pages.js'
+
+// Export database types (these are the canonical versions for the database system)
+export * from './database.js'

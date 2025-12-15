@@ -11,7 +11,10 @@
   export let editable: boolean = true;
   export let placeholder: string = "Start writing...";
   export let onUpdate: ((content: string) => void) | undefined = undefined;
+  // Unused prop kept for API compatibility
   export let showToolbar: boolean = false;
+  // Suppress unused warning by referencing it
+  $: void showToolbar;
 
   // Editor instance
   let editor: Editor | null = null;
@@ -38,7 +41,9 @@
         element: editorElement,
         extensions: [
           StarterKit.configure({
-            history: false as any,
+            // Disable history since we use Y.js for collaborative editing
+            // @ts-expect-error history option exists but is not typed
+            history: false,
           }),
           Typography,
           Collaboration.configure({

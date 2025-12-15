@@ -34,8 +34,30 @@ export { HybridStorageService, hybridStorageService } from './hybrid-storage';
 // Note management service
 export { NoteManager, noteManager } from './note-manager';
 
+// Block management service
+export { BlockManager, blockManager } from './block-manager';
+
+// Page management service
+export { PageManager, pageManager } from './page-manager';
+
 // Error handling service
 export { ErrorHandlerService, errorHandler } from './error-handler';
 
 // Notification service
 export { NotificationService, notificationService } from './notification';
+
+// Database service
+export { DatabaseService, databaseService } from './database-service';
+
+// Share service
+export { ShareService, shareService } from './share-service';
+
+// User data service (global user database)
+export { userDataService } from './user-data-service';
+export type { 
+  UserData, 
+  WorkspaceData, 
+  PageReference, 
+  DatabaseReference, 
+  ContentReference 
+} from './user-data-service';
