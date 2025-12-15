@@ -43,12 +43,13 @@ const SHARE_LINKS_KEY = 'storacha_share_links';
 const SHARE_ACCESS_LOG_KEY = 'storacha_share_access_log';
 const DELEGATIONS_KEY = 'storacha_delegations';
 const INVITATIONS_KEY = 'storacha_invitations';
+const SHORT_CODES_KEY = 'storacha_share_short_codes';
 
 // Token v2 (self-contained, cross-device) helpers
 const SHARE_TOKEN_USES_PREFIX = 'storacha_share_token_uses_';
 const REVOKED_TOKEN_IDS_KEY = 'storacha_share_revoked_token_ids';
 
-type ShareTokenV2 = {
+export type ShareTokenV2 = {
   v: 2;
   resourceType: 'database' | 'page';
   resourceId: string;
@@ -60,6 +61,19 @@ type ShareTokenV2 = {
   jti: string;
   /** DID of the creator for identity verification */
   issuerDid?: string;
+  /** Enable live sync via WebRTC */
+  liveSync?: boolean;
+};
+
+/** Short code entry for friendly URLs */
+export type ShortCodeEntry = {
+  code: string;
+  token: string;
+  pageId: string;
+  cid: string;
+  createdAt: string;
+  liveSync: boolean;
+  expiresAt?: string;
 };
 
 const base64UrlEncodeBytes = (bytes: Uint8Array): string => {
@@ -84,7 +98,7 @@ const encodeShareTokenV2 = (payload: ShareTokenV2): string => {
   return base64UrlEncodeBytes(bytes);
 };
 
-const decodeShareTokenV2 = (token: string): ShareTokenV2 | null => {
+export const decodeShareTokenV2 = (token: string): ShareTokenV2 | null => {
   try {
     const bytes = base64UrlDecodeToBytes(token);
     const json = new TextDecoder().decode(bytes);
@@ -167,6 +181,43 @@ const hashPassword = async (password: string): Promise<string> => {
     hash = hash & hash;
   }
   return Math.abs(hash).toString(16);
+};
+
+// Generate a short, memorable share code (8 characters)
+const generateShortCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let code = '';
+  const array = new Uint8Array(8);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(array);
+  } else {
+    for (let i = 0; i < 8; i++) array[i] = Math.floor(Math.random() * 256);
+  }
+  for (let i = 0; i < 8; i++) {
+    code += chars[array[i] % chars.length];
+  }
+  return code;
+};
+
+// Short code storage helpers
+const getShortCodes = (): Map<string, ShortCodeEntry> => {
+  try {
+    const raw = localStorage.getItem(SHORT_CODES_KEY);
+    if (!raw) return new Map();
+    const entries = JSON.parse(raw) as ShortCodeEntry[];
+    return new Map(entries.map(e => [e.code, e]));
+  } catch {
+    return new Map();
+  }
+};
+
+const saveShortCodes = (codes: Map<string, ShortCodeEntry>): void => {
+  try {
+    const entries = Array.from(codes.values());
+    localStorage.setItem(SHORT_CODES_KEY, JSON.stringify(entries));
+  } catch (e) {
+    console.warn('Failed to save short codes:', e);
+  }
 };
 
 /**
@@ -354,6 +405,14 @@ class ShareService implements EnhancedShareServiceInterface {
   /**
    * Create a public shareable link for a page (notes/documents).
    * Syncs the page and its blocks to Storacha, then embeds the CID in a self-contained token.
+   * 
+   * @param pageId - The page ID to share
+   * @param permission - The permission level (view, comment, edit)
+   * @param options - Additional options:
+   *   - expiresAt: Expiration date
+   *   - password: Password protection
+   *   - maxUses: Maximum number of uses
+   *   - liveSync: Enable real-time updates via WebRTC (viewers see edits live)
    */
   async createPageLink(
     pageId: string,
@@ -362,6 +421,7 @@ class ShareService implements EnhancedShareServiceInterface {
       expiresAt?: string;
       password?: string;
       maxUses?: number;
+      liveSync?: boolean;
     }
   ): Promise<PublicShareLink> {
     await this.initialize();
@@ -424,11 +484,26 @@ class ShareService implements EnhancedShareServiceInterface {
       issuerDid
     });
 
-    // Generate the shareable URL
+    // Generate short code for user-friendly URL
+    const shortCode = generateShortCode();
+    
+    // Store short code mapping
+    const shortCodes = getShortCodes();
+    shortCodes.set(shortCode, {
+      code: shortCode,
+      token,
+      pageId,
+      cid: pageCid,
+      createdAt: now,
+      liveSync: options?.liveSync ?? false
+    });
+    saveShortCodes(shortCodes);
+
+    // Generate user-friendly short URL
     const baseUrl = typeof window !== 'undefined'
       ? window.location.origin
       : 'https://storacha-notes.app';
-    const url = `${baseUrl}/shared/${token}`;
+    const url = `${baseUrl}/s/${shortCode}`;
 
     // Create public share link record
     const shareLink: PublicShareLink = {
@@ -446,8 +521,17 @@ class ShareService implements EnhancedShareServiceInterface {
     this.shareLinks.set(id, shareLink);
     await this.saveToStorage();
 
-    console.log(`Created share link for page ${pageId}: ${url}`);
+    console.log(`Created share link for page ${pageId}: ${url} (short code: ${shortCode})`);
     return shareLink;
+  }
+
+  /**
+   * Resolve a short code to its full share data.
+   * Returns the token, page ID, CID, and whether live sync is enabled.
+   */
+  resolveShortCode(shortCode: string): ShortCodeEntry | null {
+    const shortCodes = getShortCodes();
+    return shortCodes.get(shortCode) || null;
   }
 
   /**

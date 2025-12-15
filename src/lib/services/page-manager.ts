@@ -429,20 +429,61 @@ export class PageManager implements PageManagerInterface {
       console.log(`Loading page from Storacha CID: ${cid}`);
       
       // Use the public gateway directly to avoid auth requirements
-      const gatewayUrl = `https://w3s.link/ipfs/${cid}`;
-      console.log(`Fetching from gateway: ${gatewayUrl}`);
+      // Try multiple gateways for redundancy
+      const gateways = [
+        `https://w3s.link/ipfs/${cid}`,
+        `https://${cid}.ipfs.w3s.link`,
+        `https://dweb.link/ipfs/${cid}`
+      ];
       
-      const response = await fetch(gatewayUrl);
+      let response: Response | null = null;
+      let lastError: Error | null = null;
       
-      if (!response.ok) {
-        console.error(`Gateway fetch failed: ${response.status} ${response.statusText}`);
-        throw new Error(`Failed to fetch from gateway: ${response.status}`);
+      for (const gatewayUrl of gateways) {
+        console.log(`Trying gateway: ${gatewayUrl}`);
+        try {
+          response = await fetch(gatewayUrl, {
+            headers: {
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            console.log(`Successfully fetched from: ${gatewayUrl}`);
+            break;
+          } else {
+            console.warn(`Gateway ${gatewayUrl} returned ${response.status}`);
+            response = null;
+          }
+        } catch (fetchError) {
+          console.warn(`Gateway ${gatewayUrl} failed:`, fetchError);
+          lastError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+        }
+      }
+      
+      if (!response || !response.ok) {
+        console.error(`All gateways failed. Last error:`, lastError);
+        throw new Error(`Failed to fetch from any gateway`);
       }
       
       const json = await response.text();
       console.log(`Received ${json.length} bytes from gateway`);
       
-      const payload = JSON.parse(json) as { page: SerializedPage; blocks?: any[] };
+      if (!json || json.length === 0) {
+        throw new Error('Empty response from gateway');
+      }
+      
+      let payload: { page: SerializedPage; blocks?: any[] };
+      try {
+        payload = JSON.parse(json);
+      } catch (parseError) {
+        console.error('Failed to parse JSON:', json.substring(0, 200));
+        throw new Error('Invalid JSON response from gateway');
+      }
+      
+      if (!payload.page) {
+        throw new Error('Invalid page payload: missing page data');
+      }
 
       const page = this.deserializePage(payload.page);
       this.pages.set(page.id, page);
@@ -450,6 +491,7 @@ export class PageManager implements PageManagerInterface {
       // Restore blocks
       if (Array.isArray(payload.blocks)) {
         await blockManager.initialize();
+        console.log(`Restoring ${payload.blocks.length} blocks`);
         for (const serialized of payload.blocks) {
           try {
             const block = blockManager.deserializeBlock(serialized);

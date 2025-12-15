@@ -153,9 +153,18 @@
   {:else if error}
     <div class="error-state">
       <div class="error-icon">⚠️</div>
-      <h2>Access Denied</h2>
+      <h2>Unable to Load Content</h2>
       <p>{error}</p>
-      <a href="/" class="btn-primary">Go to Home</a>
+      <div class="error-actions">
+        <button class="btn-primary" onclick={() => validateToken()}>
+          Try Again
+        </button>
+        <a href="/" class="btn-secondary">Go to Home</a>
+      </div>
+      <p class="error-hint">
+        Tip: Content on the decentralized network may take a few moments to propagate.
+        If this persists, the share link may be invalid or the content may have been removed.
+      </p>
     </div>
   {:else if resourceType === 'page' && sharedPage}
     <div class="shared-header">
@@ -339,6 +348,20 @@
     margin: 0 0 1.5rem 0;
   }
 
+  .error-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .error-hint {
+    font-size: 0.8125rem;
+    color: var(--text-tertiary, #9ca3af);
+    max-width: 400px;
+    line-height: 1.5;
+  }
+
   .btn-primary {
     padding: 0.75rem 1.5rem;
     background: var(--accent-color, #3b82f6);
@@ -354,6 +377,23 @@
 
   .btn-primary:hover {
     background: var(--accent-hover, #2563eb);
+  }
+
+  .btn-secondary {
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-secondary, #f3f4f6);
+    color: var(--text-primary, #1a1a1a);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-tertiary, #e5e7eb);
   }
 
   .shared-header {
