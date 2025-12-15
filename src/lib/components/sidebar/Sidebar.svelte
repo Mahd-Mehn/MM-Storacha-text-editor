@@ -213,6 +213,52 @@
           </svg>
           <span>Settings</span>
         </a>
+
+        <a href="/templates" class="nav-item">
+          <svg
+            class="nav-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+          >
+            <rect
+              x="2"
+              y="2"
+              width="14"
+              height="14"
+              rx="2"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="M6 6h6M6 9h6M6 12h4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>Templates</span>
+        </a>
+
+        <a href="/files" class="nav-item">
+          <svg
+            class="nav-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            fill="none"
+          >
+            <path
+              d="M9 2v6m0 0L6 5m3 3l3-3M2 12v2a2 2 0 002 2h10a2 2 0 002-2v-2"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>Files</span>
+        </a>
       </nav>
     </div>
 
