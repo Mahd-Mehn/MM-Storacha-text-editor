@@ -32,11 +32,15 @@
 
   function createNewPage() {
     if (newPageTitle.trim()) {
-      workspaceState.createPage(newPageTitle.trim(), newPageIcon, newPageType);
+      const created = workspaceState.createPage(newPageTitle.trim(), newPageIcon, newPageType);
       newPageTitle = "";
       newPageIcon = "📄";
       newPageType = "file";
       showNewPageDialog = false;
+
+      if (created) {
+        openPage(created.id);
+      }
     }
   }
 
