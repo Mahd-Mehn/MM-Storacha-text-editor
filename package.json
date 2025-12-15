@@ -5,6 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:collab": "concurrently \"bun run signaling\" \"vite dev\"",
+		"signaling": "PORT=4444 y-webrtc-signaling",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
@@ -22,6 +24,7 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.0",
 		"@types/diff": "^7.0.2",
 		"@types/node": "^24.9.1",
+		"concurrently": "^9.2.1",
 		"svelte": "^5.39.5",
 		"svelte-check": "^4.3.2",
 		"typescript": "^5.9.2",
