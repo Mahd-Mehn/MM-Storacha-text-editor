@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import favicon from "$lib/assets/favicon.svg";
   import ToastNotification from "$lib/components/ToastNotification.svelte";
   import ConnectionStatusIndicator from "$lib/components/ConnectionStatusIndicator.svelte";
   import SyncStatusIndicator from "$lib/components/SyncStatusIndicator.svelte";
   import EmailLoginDialog from "$lib/components/EmailLoginDialog.svelte";
+  import KeyboardShortcutsModal from "$lib/components/KeyboardShortcutsModal.svelte";
   import Sidebar from "$lib/components/sidebar/Sidebar.svelte";
   import {
     authService,
@@ -15,6 +17,7 @@
   } from "$lib/services";
   import { errorHandler } from "$lib/services/error-handler";
   import { notificationService } from "$lib/services/notification";
+  import { keyboardShortcuts } from "$lib/services/keyboard-shortcuts";
 
   let { children } = $props();
 
@@ -23,10 +26,52 @@
   let isFirstTimeUser = $state(false);
   let showEmailLogin = $state(false);
   let needsEmailLogin = $state(false);
+  let showShortcutsModal = $state(false);
 
   onMount(async () => {
     await initializeApplication();
+    setupGlobalKeyboardShortcuts();
   });
+
+  function setupGlobalKeyboardShortcuts() {
+    // Show keyboard shortcuts help
+    keyboardShortcuts.register("show-shortcuts", {
+      key: "?",
+      shift: true,
+      description: "Show keyboard shortcuts",
+      action: () => {
+        showShortcutsModal = true;
+      },
+      category: "general",
+    });
+
+    // Navigate to templates
+    keyboardShortcuts.register("goto-templates", {
+      key: "t",
+      meta: true,
+      description: "Go to templates",
+      action: () => goto("/templates"),
+      category: "navigation",
+    });
+
+    // Navigate to files
+    keyboardShortcuts.register("goto-files", {
+      key: "u",
+      meta: true,
+      description: "Go to files",
+      action: () => goto("/files"),
+      category: "navigation",
+    });
+
+    // Navigate to dashboard
+    keyboardShortcuts.register("goto-dashboard", {
+      key: "d",
+      meta: true,
+      description: "Go to dashboard",
+      action: () => goto("/dashboard"),
+      category: "navigation",
+    });
+  }
 
   async function initializeApplication() {
     try {
@@ -248,6 +293,14 @@
               "You can now upload and share notes"
             );
           }}
+        />
+      {/if}
+
+      <!-- Keyboard shortcuts modal -->
+      {#if showShortcutsModal}
+        <KeyboardShortcutsModal
+          isOpen={showShortcutsModal}
+          onClose={() => (showShortcutsModal = false)}
         />
       {/if}
     </div>
