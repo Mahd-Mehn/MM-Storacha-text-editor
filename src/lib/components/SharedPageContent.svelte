@@ -3,20 +3,35 @@
   import type { Block } from '$lib/types/blocks';
   import { blockManager } from '$lib/services/block-manager';
 
-  let { pageId } = $props<{ pageId: string }>();
+  // Accept either blocks directly OR pageId to look them up
+  let { blocks: providedBlocks, pageId } = $props<{ 
+    blocks?: Block[];
+    pageId?: string;
+  }>();
 
-  let blocks = $state<Block[]>([]);
+  let internalBlocks = $state<Block[]>([]);
   let loading = $state(true);
 
+  // Use provided blocks if available, otherwise look them up
+  let displayBlocks = $derived(providedBlocks ?? internalBlocks);
+
   onMount(async () => {
-    await blockManager.initialize();
-    blocks = blockManager.getPageBlocks(pageId);
+    if (providedBlocks && providedBlocks.length > 0) {
+      // Blocks provided directly, no need to look up
+      loading = false;
+      return;
+    }
+    
+    if (pageId) {
+      await blockManager.initialize();
+      internalBlocks = blockManager.getPageBlocks(pageId);
+    }
     loading = false;
   });
 
   $effect(() => {
-    if (pageId && !loading) {
-      blocks = blockManager.getPageBlocks(pageId);
+    if (pageId && !loading && !providedBlocks) {
+      internalBlocks = blockManager.getPageBlocks(pageId);
     }
   });
 
@@ -28,10 +43,10 @@
 <div class="shared-content">
   {#if loading}
     <p class="loading-state">Loading content...</p>
-  {:else if blocks.length === 0}
+  {:else if displayBlocks.length === 0}
     <p class="empty-state">This page is empty.</p>
   {:else}
-    {#each blocks as block (block.id)}
+    {#each displayBlocks as block (block.id)}
       <div class="block block-{block.type}">
         {#if block.type === 'heading'}
           {#if block.properties.level === 1}

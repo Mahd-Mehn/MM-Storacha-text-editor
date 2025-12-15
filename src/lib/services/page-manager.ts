@@ -423,8 +423,9 @@ export class PageManager implements PageManagerInterface {
   /**
    * Load a page from Storacha by CID (for shared access).
    * Works for both authenticated and anonymous users via public IPFS gateway.
+   * Returns both the page and its blocks for the shared view.
    */
-  async loadFromStoracha(cid: string): Promise<Page | null> {
+  async loadFromStoracha(cid: string): Promise<{ page: Page; blocks: any[] } | null> {
     try {
       console.log(`Loading page from Storacha CID: ${cid}`);
       
@@ -488,6 +489,9 @@ export class PageManager implements PageManagerInterface {
       const page = this.deserializePage(payload.page);
       this.pages.set(page.id, page);
 
+      // Collect restored blocks
+      const restoredBlocks: any[] = [];
+      
       // Restore blocks
       if (Array.isArray(payload.blocks)) {
         await blockManager.initialize();
@@ -496,6 +500,7 @@ export class PageManager implements PageManagerInterface {
           try {
             const block = blockManager.deserializeBlock(serialized);
             blockManager.restoreBlock(block);
+            restoredBlocks.push(block);
           } catch (blockError) {
             console.warn(`Failed to restore block:`, blockError);
           }
@@ -504,7 +509,7 @@ export class PageManager implements PageManagerInterface {
 
       this.saveToStorage();
       console.log(`Successfully loaded page from Storacha: ${page.id} - ${page.title}`);
-      return page;
+      return { page, blocks: restoredBlocks };
     } catch (error) {
       console.error('Failed to load page from Storacha:', error);
       return null;

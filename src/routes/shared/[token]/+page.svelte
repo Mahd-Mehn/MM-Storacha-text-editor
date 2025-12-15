@@ -24,6 +24,7 @@
   let permission = $state<SharePermission | null>(null);
   let manifest = $state<DatabaseManifest | null>(null);
   let sharedPage = $state<Page | null>(null);
+  let sharedBlocks = $state<any[]>([]);
   let issuerDid = $state<string | null>(null);
 
   async function validateToken(pwd?: string) {
@@ -61,9 +62,10 @@
           
           const loaded = await pageManager.loadFromStoracha(result.cid);
           if (loaded) {
-            sharedPage = loaded;
-            console.log('Successfully loaded shared page:', loaded.title);
-            console.log('Loaded blocks:', blockManager.getPageBlocks(loaded.id).length);
+            sharedPage = loaded.page;
+            sharedBlocks = loaded.blocks;
+            console.log('Successfully loaded shared page:', loaded.page.title);
+            console.log('Loaded blocks:', loaded.blocks.length);
           } else {
             error = 'Failed to load shared page. The content may still be propagating across the network. Please try again in a few moments.';
           }
@@ -189,7 +191,7 @@
         {/if}
         <h1 class="page-title">{sharedPage.title}</h1>
       </div>
-      <SharedPageContent pageId={sharedPage.id} />
+      <SharedPageContent blocks={sharedBlocks} />
     </div>
   {:else if resourceType === 'database' && manifest}
     <div class="shared-header">

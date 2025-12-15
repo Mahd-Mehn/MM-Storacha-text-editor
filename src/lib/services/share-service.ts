@@ -484,10 +484,15 @@ class ShareService implements EnhancedShareServiceInterface {
       issuerDid
     });
 
-    // Generate short code for user-friendly URL
-    const shortCode = generateShortCode();
+    // Generate the shareable URL using the full token
+    // The token is self-contained with the CID, so it works across browsers
+    const baseUrl = typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://storacha-notes.app';
+    const url = `${baseUrl}/shared/${token}`;
     
-    // Store short code mapping
+    // Also store short code for local quick access (optional)
+    const shortCode = generateShortCode();
     const shortCodes = getShortCodes();
     shortCodes.set(shortCode, {
       code: shortCode,
@@ -498,12 +503,6 @@ class ShareService implements EnhancedShareServiceInterface {
       liveSync: options?.liveSync ?? false
     });
     saveShortCodes(shortCodes);
-
-    // Generate user-friendly short URL
-    const baseUrl = typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://storacha-notes.app';
-    const url = `${baseUrl}/s/${shortCode}`;
 
     // Create public share link record
     const shareLink: PublicShareLink = {
@@ -521,7 +520,7 @@ class ShareService implements EnhancedShareServiceInterface {
     this.shareLinks.set(id, shareLink);
     await this.saveToStorage();
 
-    console.log(`Created share link for page ${pageId}: ${url} (short code: ${shortCode})`);
+    console.log(`Created share link for page ${pageId}: ${url}`);
     return shareLink;
   }
 
