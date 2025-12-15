@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Block, CodeLanguage } from '$lib/types/blocks';
+  import type { Block, CodeLanguage, RichTextSegment } from '$lib/types/blocks';
 
   let { 
     block, 
@@ -43,7 +43,7 @@
 
   onMount(() => {
     if (editorElement) {
-      const text = block.properties.textContent?.map(s => s.text).join('') || '';
+      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
       editorElement.innerText = text;
       lastBlockId = block.id;
     }
@@ -51,7 +51,7 @@
 
   $effect(() => {
     if (editorElement && block.id !== lastBlockId) {
-      const text = block.properties.textContent?.map(s => s.text).join('') || '';
+      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
       editorElement.innerText = text;
       lastBlockId = block.id;
     }
@@ -86,7 +86,7 @@
   }
 
   function copyCode() {
-    const text = block.properties.textContent?.map(s => s.text).join('') || '';
+    const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
     navigator.clipboard.writeText(text);
   }
 </script>
@@ -133,17 +133,18 @@
       </button>
     </div>
 
-    <pre><code
+    <pre><div
       bind:this={editorElement}
       contenteditable={editable}
-      class="block-content"
+      class="block-content code-editor"
       data-placeholder="// Write your code here..."
       oninput={handleInput}
       onkeydown={handleKeydown}
       onfocus={() => onFocus?.()}
       role="textbox"
+      aria-label="Code editor"
       tabindex="0"
-    ></code></pre>
+    ></div></pre>
   </div>
 </div>
 

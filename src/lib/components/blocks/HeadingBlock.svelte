@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Block } from '$lib/types/blocks';
+  import type { Block, RichTextSegment } from '$lib/types/blocks';
 
   let { 
     block, 
@@ -28,7 +28,7 @@
   // Set initial content when component mounts
   onMount(() => {
     if (editorElement) {
-      const text = block.properties.textContent?.map(s => s.text).join('') || '';
+      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
       editorElement.innerText = text;
       lastBlockId = block.id;
     }
@@ -37,7 +37,7 @@
   // Update content when block.id changes (switching to different block)
   $effect(() => {
     if (editorElement && block.id !== lastBlockId) {
-      const text = block.properties.textContent?.map(s => s.text).join('') || '';
+      const text = block.properties.textContent?.map((s: RichTextSegment) => s.text).join('') || '';
       editorElement.innerText = text;
       lastBlockId = block.id;
     }

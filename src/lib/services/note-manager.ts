@@ -13,6 +13,7 @@ import { storachaClient } from './storacha';
 import { autoSaveService } from './autosave';
 import { versionHistoryService } from './version-history';
 import { hybridStorageService } from './hybrid-storage';
+import { userDataService } from './user-data-service';
 import type { Doc as YDoc } from 'yjs';
 
 /**
@@ -123,6 +124,16 @@ export class NoteManager implements NoteManagerInterface {
     // Index the note for search
     this.indexNoteForSearch(note);
 
+    // Register with user data service
+    try {
+      await userDataService.initialize();
+      await userDataService.addPage(noteId, note.title, 'default', {
+        isFolder: false
+      });
+    } catch (error) {
+      console.error('Failed to register note with user data service:', error);
+    }
+
     // Schedule auto-save for the new note
     this.autoSaveService.scheduleAutoSave(note, 'high');
 
@@ -199,6 +210,13 @@ export class NoteManager implements NoteManagerInterface {
       const result = await this.hybridStorageService.storeNote(storedData);
       if (result.cid) {
         note.metadata.storachaCID = result.cid;
+        
+        // Update CID in user data service
+        try {
+          await userDataService.updatePageCid(note.id, result.cid);
+        } catch (error) {
+          console.error('Failed to update note CID in user data:', error);
+        }
       }
 
       // Update cache
@@ -243,6 +261,13 @@ export class NoteManager implements NoteManagerInterface {
       
       // Remove from search index
       this.removeFromSearchIndex(id);
+      
+      // Remove from user data service
+      try {
+        await userDataService.removeContent(id);
+      } catch (error) {
+        console.error('Failed to remove note from user data:', error);
+      }
 
       console.log(`Deleted note: ${id}`);
     } catch (error) {

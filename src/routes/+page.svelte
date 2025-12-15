@@ -70,7 +70,8 @@
   async function createDefaultPage() {
     const newPage = pageManager.createPage({
       title: "Getting Started",
-      icon: { type: "emoji", value: "🚀" }
+      icon: { type: "emoji", value: "🚀" },
+      workspaceId: "default"
     });
     
     // Create a welcome block
@@ -110,7 +111,8 @@
   function handleCreatePage(event: CustomEvent<{ parentId?: string }>) {
     const newPage = pageManager.createPage({
       title: "Untitled",
-      parentId: event.detail?.parentId || null
+      parentId: event.detail?.parentId || null,
+      workspaceId: "default"
     });
     
     // Create initial empty block

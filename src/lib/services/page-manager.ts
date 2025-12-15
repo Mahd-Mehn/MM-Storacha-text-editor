@@ -19,6 +19,7 @@ export interface PageManagerInterface {
   initialize(): Promise<void>;
   createPage(input: CreatePageInput): Page;
   getPage(pageId: string): Page | undefined;
+  getAllPages(): Page[];
   updatePage(input: UpdatePageInput): Page | undefined;
   deletePage(pageId: string): boolean;
   movePage(input: MovePageInput): boolean;
@@ -127,6 +128,13 @@ export class PageManager implements PageManagerInterface {
    */
   getPage(pageId: string): Page | undefined {
     return this.pages.get(pageId);
+  }
+
+  /**
+   * Get all pages
+   */
+  getAllPages(): Page[] {
+    return Array.from(this.pages.values());
   }
 
   /**
