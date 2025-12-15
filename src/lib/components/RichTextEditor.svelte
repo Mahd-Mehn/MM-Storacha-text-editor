@@ -4,10 +4,17 @@
   import StarterKit from "@tiptap/starter-kit";
   import Typography from "@tiptap/extension-typography";
   import Collaboration from "@tiptap/extension-collaboration";
+  import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
   import type { Doc as YDoc } from "yjs";
 
   // Props
   export let yjsDocument: YDoc;
+  // Optional provider (e.g. y-webrtc WebrtcProvider) for presence/cursors.
+  // It must expose an `awareness` instance.
+  export let collaborationProvider: any | undefined = undefined;
+  export let collaborationUser:
+    | { name: string; color: string }
+    | undefined = undefined;
   export let editable: boolean = true;
   export let placeholder: string = "Start writing...";
   export let onUpdate: ((content: string) => void) | undefined = undefined;
@@ -19,38 +26,52 @@
   // Editor instance
   let editor: Editor | null = null;
   let editorElement: HTMLElement;
+  let mounted = false;
 
-  // Initialize editor on mount
-  onMount(() => {
+  function destroyEditor() {
+    if (!editor) return;
+    try {
+      editor.destroy();
+    } catch (e) {
+      console.warn("Error destroying editor:", e);
+    }
+    editor = null;
+  }
+
+  function initEditor() {
     if (!yjsDocument) {
       console.error("YjsDocument is required for RichTextEditor");
       return;
     }
 
-    if (editor) {
-      try {
-        editor.destroy();
-      } catch (e) {
-        console.warn("Error destroying previous editor:", e);
-      }
-      editor = null;
-    }
+    destroyEditor();
 
     try {
+      const extensions: any[] = [
+        StarterKit.configure({
+          // Disable history since we use Y.js for collaborative editing
+          // @ts-expect-error history option exists but is not typed
+          history: false,
+        }),
+        Typography,
+        Collaboration.configure({
+          document: yjsDocument,
+          field: "content",
+        }),
+      ];
+
+      if (collaborationProvider) {
+        extensions.push(
+          CollaborationCursor.configure({
+            provider: collaborationProvider,
+            user: collaborationUser ?? { name: "Anonymous", color: "#00FF43" },
+          })
+        );
+      }
+
       editor = new Editor({
         element: editorElement,
-        extensions: [
-          StarterKit.configure({
-            // Disable history since we use Y.js for collaborative editing
-            // @ts-expect-error history option exists but is not typed
-            history: false,
-          }),
-          Typography,
-          Collaboration.configure({
-            document: yjsDocument,
-            field: "content",
-          }),
-        ],
+        extensions,
         content: "",
         editable,
         editorProps: {
@@ -69,18 +90,27 @@
     } catch (error) {
       console.error("Failed to initialize editor:", error);
     }
+  }
+
+  // Initialize editor on mount
+  onMount(() => {
+    mounted = true;
+    initEditor();
   });
 
   onDestroy(() => {
-    if (editor) {
-      try {
-        editor.destroy();
-      } catch (e) {
-        console.warn("Error destroying editor on cleanup:", e);
-      }
-      editor = null;
-    }
+    destroyEditor();
   });
+
+  // Re-init when the doc/provider changes (e.g. collaboration connects, version restore)
+  $: if (mounted && editorElement && yjsDocument) {
+    // Include provider/user/placeholder so we rebuild when collaboration connects
+    // or display metadata changes.
+    void collaborationProvider;
+    void collaborationUser;
+    void placeholder;
+    initEditor();
+  }
 
   $: if (editor) {
     editor.setEditable(editable);

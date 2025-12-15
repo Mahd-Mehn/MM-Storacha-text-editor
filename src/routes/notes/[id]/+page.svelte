@@ -1,29 +1,81 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { page } from '$app/stores';
   import RichTextEditor from '$lib/components/RichTextEditor.svelte';
   import VersionHistorySidebar from '$lib/components/VersionHistorySidebar.svelte';
   import VersionDiffViewer from '$lib/components/VersionDiffViewer.svelte';
   import * as Y from 'yjs';
   import { versionHistoryService } from '$lib/services/version-history.js';
+  import {
+    createWebrtcCollaborationSession,
+    getOrCreateLocalCollaborationUser,
+    type CollaborationUser,
+    type WebrtcCollaborationSession
+  } from '$lib/services/collaboration-sync';
   
   // Get note ID from route params
   let noteId = $derived($page.params.id ?? '');
   
   // State
-  let yjsDocument: Y.Doc | null = null;
+  let yjsDocument = $state<Y.Doc | null>(null);
+  let collabUser = $state<CollaborationUser | null>(null);
+  let collabSession = $state<WebrtcCollaborationSession | null>(null);
+  let collabProvider = $derived(collabSession?.provider);
   let showVersionHistory = $state(true);
   let showDiffViewer = $state(false);
   let compareFromVersion = $state<number | null>(null);
   let compareToVersion = $state<number | null>(null);
   let currentVersion = $state(1);
+
+  function roomForNote(id: string): string {
+    return `note:${id}`;
+  }
+
+  async function startCollaboration(doc: Y.Doc) {
+    if (!noteId) return;
+    if (!collabUser) return;
+
+    // Recreate session if doc changes (e.g. restoring a version)
+    try {
+      collabSession?.destroy();
+    } catch {
+      // ignore
+    }
+    collabSession = null;
+
+    try {
+      collabSession = await createWebrtcCollaborationSession({
+        room: roomForNote(noteId),
+        doc,
+        user: collabUser,
+      });
+    } catch (e) {
+      console.warn('Failed to start collaboration session:', e);
+    }
+  }
   
   onMount(() => {
+    // Local user profile for awareness/cursors
+    collabUser = getOrCreateLocalCollaborationUser();
+
     // Initialize Yjs document
-    yjsDocument = new Y.Doc();
+    const doc = new Y.Doc();
+    yjsDocument = doc;
+
+    // Start collaboration (client-only)
+    void startCollaboration(doc);
     
     // Load note data if it exists
     loadNote();
+  });
+
+  onDestroy(() => {
+    try {
+      collabSession?.destroy();
+    } catch {
+      // ignore
+    }
+    collabSession = null;
   });
   
   async function loadNote() {
@@ -34,7 +86,9 @@
       // For now, create a sample note
       if (yjsDocument) {
         const text = yjsDocument.getText('content');
-        text.insert(0, 'Welcome to your note!\n\nStart typing to create your first version.');
+        if (text.length === 0) {
+          text.insert(0, 'Welcome to your note!\n\nStart typing to create your first version.');
+        }
       }
     } catch (error) {
       console.error('Failed to load note:', error);
@@ -52,6 +106,7 @@
       if (restoredNote && yjsDocument) {
         // Replace current document with restored version
         yjsDocument = restoredNote.content;
+        void startCollaboration(restoredNote.content);
         console.log('Version restored:', version);
       }
     } catch (error) {
@@ -101,6 +156,8 @@
       {#if yjsDocument}
         <RichTextEditor 
           yjsDocument={yjsDocument}
+          collaborationProvider={collabProvider}
+          collaborationUser={collabUser ?? undefined}
           editable={true}
           placeholder="Start writing your note..."
           showToolbar={true}
