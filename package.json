@@ -28,6 +28,7 @@
 		"vite": "^7.1.7"
 	},
 	"dependencies": {
+		"@noble/ciphers": "^1.0.0",
 		"@playwright/test": "^1.57.0",
 		"@storacha/client": "^1.8.4",
 		"@tiptap/core": "^3.8.0",
