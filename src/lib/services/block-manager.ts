@@ -45,6 +45,100 @@ export class BlockManager implements BlockManagerInterface {
   private initialized = false;
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private readonly SAVE_DEBOUNCE_MS = 300;
+  
+  // Storacha cloud sync
+  private cloudSyncTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly CLOUD_SYNC_DEBOUNCE_MS = 5000; // 5 seconds after last change
+  private modifiedPages: Set<string> = new Set();
+  private cloudSyncEnabled = false;
+  private pageManagerRef: { syncToStoracha: (pageId: string) => Promise<string | null> } | null = null;
+
+  /**
+   * Enable cloud sync with Storacha
+   * Call this after pageManager is available
+   */
+  enableCloudSync(pageManager: { syncToStoracha: (pageId: string) => Promise<string | null> }): void {
+    this.pageManagerRef = pageManager;
+    this.cloudSyncEnabled = true;
+    console.log('BlockManager: Cloud sync enabled');
+  }
+
+  /**
+   * Disable cloud sync
+   */
+  disableCloudSync(): void {
+    this.cloudSyncEnabled = false;
+    this.pageManagerRef = null;
+    if (this.cloudSyncTimeout) {
+      clearTimeout(this.cloudSyncTimeout);
+      this.cloudSyncTimeout = null;
+    }
+  }
+
+  /**
+   * Schedule a debounced cloud sync to Storacha
+   */
+  private scheduleCloudSync(pageId: string): void {
+    if (!this.cloudSyncEnabled) return;
+    
+    // Mark page as modified
+    this.modifiedPages.add(pageId);
+    
+    // Clear existing timer
+    if (this.cloudSyncTimeout) {
+      clearTimeout(this.cloudSyncTimeout);
+    }
+    
+    // Set new timer
+    this.cloudSyncTimeout = setTimeout(() => {
+      this.executeCloudSync();
+      this.cloudSyncTimeout = null;
+    }, this.CLOUD_SYNC_DEBOUNCE_MS);
+  }
+
+  /**
+   * Execute cloud sync for all modified pages
+   */
+  private async executeCloudSync(): Promise<void> {
+    if (!this.cloudSyncEnabled || !this.pageManagerRef) return;
+    if (this.modifiedPages.size === 0) return;
+    
+    const pagesToSync = Array.from(this.modifiedPages);
+    this.modifiedPages.clear();
+    
+    console.log(`BlockManager: Syncing ${pagesToSync.length} page(s) to Storacha...`);
+    
+    for (const pageId of pagesToSync) {
+      try {
+        const cid = await this.pageManagerRef.syncToStoracha(pageId);
+        if (cid) {
+          console.log(`BlockManager: Page ${pageId} synced to Storacha (CID: ${cid})`);
+        }
+      } catch (error) {
+        console.warn(`BlockManager: Failed to sync page ${pageId} to Storacha:`, error);
+        // Re-add to modified set to retry later
+        this.modifiedPages.add(pageId);
+      }
+    }
+  }
+
+  /**
+   * Force immediate cloud sync for a specific page
+   */
+  async forceCloudSync(pageId: string): Promise<string | null> {
+    if (!this.cloudSyncEnabled || !this.pageManagerRef) {
+      console.warn('BlockManager: Cloud sync not enabled');
+      return null;
+    }
+    
+    this.modifiedPages.delete(pageId);
+    try {
+      return await this.pageManagerRef.syncToStoracha(pageId);
+    } catch (error) {
+      console.error('BlockManager: Force cloud sync failed:', error);
+      return null;
+    }
+  }
 
   /**
    * Initialize the block manager
@@ -171,6 +265,9 @@ export class BlockManager implements BlockManagerInterface {
 
     // Auto-save after creation
     this.saveToStorage();
+    
+    // Schedule cloud sync
+    this.scheduleCloudSync(input.pageId);
 
     console.log(`Created block: ${blockId} (${input.type})`);
     return block;
@@ -246,6 +343,9 @@ export class BlockManager implements BlockManagerInterface {
 
     // Schedule debounced save for updates (called frequently during typing)
     this.scheduleSave();
+    
+    // Schedule cloud sync
+    this.scheduleCloudSync(block.pageId);
 
     console.log(`Updated block: ${input.id}`);
     return block;
@@ -280,10 +380,14 @@ export class BlockManager implements BlockManagerInterface {
     }
 
     // Delete the block
+    const pageId = block.pageId;
     this.blocks.delete(blockId);
 
     // Auto-save after deletion
     this.saveToStorage();
+    
+    // Schedule cloud sync
+    this.scheduleCloudSync(pageId);
 
     console.log(`Deleted block: ${blockId}`);
     return true;
@@ -363,6 +467,9 @@ export class BlockManager implements BlockManagerInterface {
 
     // Auto-save after move
     this.saveToStorage();
+    
+    // Schedule cloud sync
+    this.scheduleCloudSync(block.pageId);
 
     console.log(`Moved block: ${input.blockId}`);
     return true;
@@ -425,6 +532,41 @@ export class BlockManager implements BlockManagerInterface {
     return childIds
       .map(id => this.blocks.get(id))
       .filter((block): block is Block => block !== undefined);
+  }
+
+  /**
+   * Get ALL blocks for a page (including nested children)
+   */
+  getBlocksForPage(pageId: string): Block[] {
+    const ids = this.pageBlockIndex.get(pageId);
+    if (!ids) return [];
+    return Array.from(ids)
+      .map(id => this.blocks.get(id))
+      .filter((b): b is Block => b !== undefined);
+  }
+
+  /**
+   * Restore a block (from Storacha) without triggering createBlock logic
+   */
+  restoreBlock(block: Block): void {
+    this.blocks.set(block.id, block);
+
+    // Index by page
+    let pageBlocks = this.pageBlockIndex.get(block.pageId);
+    if (!pageBlocks) {
+      pageBlocks = new Set();
+      this.pageBlockIndex.set(block.pageId, pageBlocks);
+    }
+    pageBlocks.add(block.id);
+
+    // Index by parent
+    if (block.parentId) {
+      const siblings = this.childBlockIndex.get(block.parentId) || [];
+      if (!siblings.includes(block.id)) {
+        siblings.push(block.id);
+        this.childBlockIndex.set(block.parentId, siblings);
+      }
+    }
   }
 
   /**
@@ -567,17 +709,27 @@ export class BlockManager implements BlockManagerInterface {
       const stored = localStorage.getItem('storacha-blocks');
       if (stored) {
         const data = JSON.parse(stored) as SerializedBlock[];
+        let loadedCount = 0;
+        let skippedCount = 0;
+        
         for (const serialized of data) {
-          const block = this.deserializeBlock(serialized);
-          this.blocks.set(block.id, block);
-          
-          // Rebuild indexes
-          if (!this.pageBlockIndex.has(block.pageId)) {
-            this.pageBlockIndex.set(block.pageId, new Set());
+          try {
+            const block = this.deserializeBlock(serialized);
+            this.blocks.set(block.id, block);
+            
+            // Rebuild indexes
+            if (!this.pageBlockIndex.has(block.pageId)) {
+              this.pageBlockIndex.set(block.pageId, new Set());
+            }
+            this.pageBlockIndex.get(block.pageId)!.add(block.id);
+            loadedCount++;
+          } catch (blockError) {
+            // Skip corrupted blocks but continue loading others
+            console.warn(`Skipping corrupted block ${serialized?.id || 'unknown'}:`, blockError);
+            skippedCount++;
           }
-          this.pageBlockIndex.get(block.pageId)!.add(block.id);
         }
-        console.log(`Loaded ${data.length} blocks from storage`);
+        console.log(`Loaded ${loadedCount} blocks from storage (skipped ${skippedCount} corrupted)`);
       }
     } catch (error) {
       console.warn('Failed to load blocks from storage:', error);

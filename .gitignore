@@ -25,3 +25,5 @@ vite.config.ts.timestamp-*
 DEPLOYMENT.md
 IMPROVEMENTS.md
 OPTIMIZATIONS.md
+test-results/
+playwright-report/

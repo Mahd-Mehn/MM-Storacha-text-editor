@@ -106,15 +106,60 @@ export async function createWebrtcCollaborationSession(opts: {
     import('y-webrtc') as Promise<{ WebrtcProvider: new (room: string, doc: import('yjs').Doc, opts?: any) => any }>
   ]);
 
-  const signaling = opts.signaling ?? parseSignalingServers((import.meta as any).env?.VITE_YJS_SIGNALING_SERVERS);
+  // Check for environment-configured signaling servers (local dev or custom)
+  const envSignaling = parseSignalingServers((import.meta as any).env?.VITE_YJS_SIGNALING_SERVERS);
+  
+  // Default public signaling servers (fallback when no local server)
+  const defaultSignaling = [
+    'wss://signaling.yjs.dev',
+    'wss://y-webrtc-signaling-eu.herokuapp.com',
+    'wss://y-webrtc-signaling-us.herokuapp.com'
+  ];
+
+  const signaling = opts.signaling ?? envSignaling ?? defaultSignaling;
+  
+  // Log which signaling servers are being used
+  const isLocal = signaling.some(s => s.includes('localhost') || s.includes('127.0.0.1'));
+  console.log(`WebRTC signaling: Using ${isLocal ? 'local' : 'public'} server(s):`, signaling);
+    
   const iceServers = opts.iceServers ?? parseIceServers((import.meta as any).env?.VITE_YJS_ICE_SERVERS);
+
+  // Default STUN/TURN servers for NAT traversal
+  const defaultIceServers: IceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+  ];
 
   const provider = new WebrtcProvider(opts.room, opts.doc, {
     password: opts.password,
     signaling,
-    peerOpts: iceServers ? { config: { iceServers } } : undefined,
-    maxConns: 20
+    peerOpts: { 
+      config: { 
+        iceServers: iceServers ?? defaultIceServers 
+      } 
+    },
+    maxConns: 20,
+    // Filter messages to reduce noise
+    filterBcConns: true
   });
+
+  // Suppress WebSocket connection errors in console (they're expected when servers are down)
+  // The provider will automatically retry with other signaling servers
+  let wsErrorLogged = false;
+  const originalError = console.error;
+  const wsErrorFilter = (...args: unknown[]) => {
+    const msg = args[0];
+    if (typeof msg === 'string' && msg.includes('WebSocket connection')) {
+      if (!wsErrorLogged) {
+        console.warn('WebRTC signaling: Some servers unavailable, trying alternatives...');
+        wsErrorLogged = true;
+      }
+      return;
+    }
+    originalError.apply(console, args);
+  };
+  // Note: We don't override console.error globally as it would affect other logs
 
   const awareness = (provider as any).awareness;
   if (awareness?.setLocalStateField) {

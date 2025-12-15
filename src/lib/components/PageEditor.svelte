@@ -226,6 +226,9 @@
     // Ensure services are initialized
     await pageManager.initialize();
     await blockManager.initialize();
+    
+    // Enable cloud sync for automatic Storacha uploads
+    blockManager.enableCloudSync(pageManager);
 
     // First try pageManager
     page = pageManager.getPage(id);
