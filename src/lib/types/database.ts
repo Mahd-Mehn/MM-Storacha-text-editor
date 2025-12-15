@@ -330,7 +330,7 @@ export interface PublicShareLink {
 
 export interface SerializedDatabase {
   manifest: DatabaseManifest;
-  shareConfigs: ShareConfig[];
+  shareConfigs?: ShareConfig[];
 }
 
 export interface SerializedDatabaseRow {
@@ -432,7 +432,7 @@ export interface ShareServiceInterface {
   createPublicLink(databaseId: string, permission: SharePermission, options?: { expiresAt?: string; password?: string }): Promise<PublicShareLink>;
   getShareLinks(databaseId: string): Promise<PublicShareLink[]>;
   revokeShareLink(linkId: string): Promise<boolean>;
-  validateShareToken(token: string): Promise<{ valid: boolean; databaseId?: string; permission?: SharePermission }>;
+  validateShareToken(token: string): Promise<{ valid: boolean; databaseId?: string; cid?: string; permission?: SharePermission; error?: string }>;
   
   // Access Control
   canAccess(databaseId: string, userDID?: string): Promise<{ canAccess: boolean; permission: SharePermission | null }>;
@@ -472,6 +472,14 @@ export type ResourceCapability =
   | 'database/write'
   | 'database/delete'
   | 'database/share'
+  | 'page/read'
+  | 'page/write'
+  | 'page/delete'
+  | 'page/share'
+  | 'workspace/read'
+  | 'workspace/write'
+  | 'workspace/admin'
+  | 'workspace/share'
   | 'row/read'
   | 'row/write'
   | 'row/delete';

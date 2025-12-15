@@ -29,7 +29,12 @@ import type {
 import { storachaClient } from './storacha';
 import { authService } from './auth';
 import { spaceService } from './space';
+import { databaseService } from './database-service';
+import { pageManager } from './page-manager';
+import { blockManager } from './block-manager';
 import { cryptoUtils, type EncryptedPayload, type WrappedKey } from './crypto-utils';
+import { workspaceState, type Page as WorkspacePage } from '$lib/stores/workspace';
+import { get } from 'svelte/store';
 import * as Delegation from '@storacha/client/delegation';
 
 // Storage keys
@@ -38,6 +43,93 @@ const SHARE_LINKS_KEY = 'storacha_share_links';
 const SHARE_ACCESS_LOG_KEY = 'storacha_share_access_log';
 const DELEGATIONS_KEY = 'storacha_delegations';
 const INVITATIONS_KEY = 'storacha_invitations';
+
+// Token v2 (self-contained, cross-device) helpers
+const SHARE_TOKEN_USES_PREFIX = 'storacha_share_token_uses_';
+const REVOKED_TOKEN_IDS_KEY = 'storacha_share_revoked_token_ids';
+
+type ShareTokenV2 = {
+  v: 2;
+  resourceType: 'database' | 'page';
+  resourceId: string;
+  cid: string;
+  permission: SharePermission;
+  expiresAt?: string;
+  password?: string; // hashed
+  maxUses?: number;
+  jti: string;
+  /** DID of the creator for identity verification */
+  issuerDid?: string;
+};
+
+const base64UrlEncodeBytes = (bytes: Uint8Array): string => {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+};
+
+const base64UrlDecodeToBytes = (input: string): Uint8Array => {
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+};
+
+const encodeShareTokenV2 = (payload: ShareTokenV2): string => {
+  const json = JSON.stringify(payload);
+  const bytes = new TextEncoder().encode(json);
+  return base64UrlEncodeBytes(bytes);
+};
+
+const decodeShareTokenV2 = (token: string): ShareTokenV2 | null => {
+  try {
+    const bytes = base64UrlDecodeToBytes(token);
+    const json = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(json) as ShareTokenV2;
+    if (
+      parsed &&
+      parsed.v === 2 &&
+      typeof parsed.resourceId === 'string' &&
+      typeof parsed.cid === 'string' &&
+      typeof parsed.jti === 'string' &&
+      (parsed.resourceType === 'database' || parsed.resourceType === 'page')
+    ) {
+      return parsed;
+    }
+    // Legacy fallback: check for old databaseId field
+    const legacy = parsed as any;
+    if (legacy.v === 2 && typeof legacy.databaseId === 'string' && typeof legacy.cid === 'string') {
+      return {
+        ...legacy,
+        resourceType: 'database',
+        resourceId: legacy.databaseId
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const getRevokedTokenIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(REVOKED_TOKEN_IDS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(arr);
+  } catch {
+    return new Set();
+  }
+};
+
+const addRevokedTokenId = (jti: string): void => {
+  const set = getRevokedTokenIds();
+  set.add(jti);
+  localStorage.setItem(REVOKED_TOKEN_IDS_KEY, JSON.stringify(Array.from(set)));
+};
 
 // Generate secure token
 const generateToken = (): string => {
@@ -168,19 +260,51 @@ class ShareService implements EnhancedShareServiceInterface {
       expiresAt?: string;
       password?: string;
       allowDuplication?: boolean;
+      maxUses?: number;
     }
   ): Promise<PublicShareLink> {
     await this.initialize();
 
     const now = new Date().toISOString();
     const id = `share_${Date.now()}_${generateId()}`;
-    const token = generateToken();
 
     // Hash password if provided
     let hashedPassword: string | undefined;
     if (options?.password) {
       hashedPassword = await hashPassword(options.password);
     }
+
+    // External share links must be loadable without the creator's localStorage.
+    // We achieve this by embedding the Storacha manifest CID into the share token.
+    let manifestCid: string | null = null;
+    try {
+      await databaseService.initialize();
+      manifestCid = await databaseService.syncToStoracha(databaseId);
+    } catch (error) {
+      console.error('Failed to sync database for external sharing:', error);
+      manifestCid = null;
+    }
+
+    if (!manifestCid) {
+      throw new Error(
+        'Cloud sync is required to create external share links. Login with email and ensure a Storacha space is provisioned.'
+      );
+    }
+
+    const jti = generateToken();
+    const issuerDid = authService.getCurrentDID() || undefined;
+    const token = encodeShareTokenV2({
+      v: 2,
+      resourceType: 'database',
+      resourceId: databaseId,
+      cid: manifestCid,
+      permission,
+      expiresAt: options?.expiresAt,
+      password: hashedPassword,
+      maxUses: options?.maxUses,
+      jti,
+      issuerDid
+    });
 
     // Create share config
     const config: EnhancedShareConfig = {
@@ -224,6 +348,105 @@ class ShareService implements EnhancedShareServiceInterface {
     this.shareLinks.set(id, shareLink);
     await this.saveToStorage();
 
+    return shareLink;
+  }
+
+  /**
+   * Create a public shareable link for a page (notes/documents).
+   * Syncs the page and its blocks to Storacha, then embeds the CID in a self-contained token.
+   */
+  async createPageLink(
+    pageId: string,
+    permission: SharePermission = 'view',
+    options?: {
+      expiresAt?: string;
+      password?: string;
+      maxUses?: number;
+    }
+  ): Promise<PublicShareLink> {
+    await this.initialize();
+    await pageManager.initialize();
+    await blockManager.initialize();
+
+    let page = pageManager.getPage(pageId);
+    
+    // Fallback to workspaceState for pages created via old system
+    if (!page) {
+      const state = get(workspaceState);
+      const workspacePage = this.findWorkspacePage(state.workspace.pages, pageId);
+      
+      if (workspacePage) {
+        // Migrate the page to pageManager
+        page = this.convertAndSaveWorkspacePage(workspacePage);
+      }
+    }
+    
+    if (!page) {
+      throw new Error(`Page not found: ${pageId}`);
+    }
+
+    const now = new Date().toISOString();
+    const id = `share_page_${Date.now()}_${generateId()}`;
+
+    // Hash password if provided
+    let hashedPassword: string | undefined;
+    if (options?.password) {
+      hashedPassword = await hashPassword(options.password);
+    }
+
+    // Sync page (with blocks) to Storacha
+    let pageCid: string | null = null;
+    try {
+      pageCid = await pageManager.syncToStoracha(pageId);
+    } catch (error) {
+      console.error('Failed to sync page for external sharing:', error);
+      pageCid = null;
+    }
+
+    if (!pageCid) {
+      throw new Error(
+        'Cloud sync is required to create share links. Login with email and ensure a Storacha space is provisioned.'
+      );
+    }
+
+    const jti = generateToken();
+    const issuerDid = authService.getCurrentDID() || undefined;
+    const token = encodeShareTokenV2({
+      v: 2,
+      resourceType: 'page',
+      resourceId: pageId,
+      cid: pageCid,
+      permission,
+      expiresAt: options?.expiresAt,
+      password: hashedPassword,
+      maxUses: options?.maxUses,
+      jti,
+      issuerDid
+    });
+
+    // Generate the shareable URL
+    const baseUrl = typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://storacha-notes.app';
+    const url = `${baseUrl}/shared/${token}`;
+
+    // Create public share link record
+    const shareLink: PublicShareLink = {
+      id,
+      databaseId: pageId, // reusing databaseId field for resourceId
+      token,
+      permission,
+      url,
+      expiresAt: options?.expiresAt,
+      password: hashedPassword,
+      createdAt: now,
+      viewCount: 0
+    };
+
+    this.shareLinks.set(id, shareLink);
+    await this.saveToStorage();
+
+    console.log(`Created share link for page ${pageId}: ${url}`);
     return shareLink;
   }
 
@@ -302,6 +525,14 @@ class ShareService implements EnhancedShareServiceInterface {
       config.isActive = false;
     }
 
+    const link = this.shareLinks.get(linkId);
+    if (link) {
+      const v2 = decodeShareTokenV2(link.token);
+      if (v2?.jti) {
+        addRevokedTokenId(v2.jti);
+      }
+    }
+
     this.shareLinks.delete(linkId);
     await this.saveToStorage();
 
@@ -317,10 +548,56 @@ class ShareService implements EnhancedShareServiceInterface {
   ): Promise<{
     valid: boolean;
     databaseId?: string;
+    resourceId?: string;
+    resourceType?: 'database' | 'page';
+    cid?: string;
     permission?: SharePermission;
+    issuerDid?: string;
     error?: string;
   }> {
     await this.initialize();
+
+    // v2 tokens are self-contained and work across devices.
+    const v2 = decodeShareTokenV2(token);
+    if (v2) {
+      const revoked = getRevokedTokenIds();
+      if (revoked.has(v2.jti)) {
+        return { valid: false, error: 'This share link has been revoked' };
+      }
+
+      if (v2.expiresAt && new Date(v2.expiresAt) < new Date()) {
+        return { valid: false, error: 'This share link has expired' };
+      }
+
+      if (v2.password) {
+        if (!password) {
+          return { valid: false, error: 'Password required' };
+        }
+        const hashedInput = await hashPassword(password);
+        if (hashedInput !== v2.password) {
+          return { valid: false, error: 'Incorrect password' };
+        }
+      }
+
+      if (typeof v2.maxUses === 'number') {
+        const key = `${SHARE_TOKEN_USES_PREFIX}${v2.jti}`;
+        const current = Number(localStorage.getItem(key) || '0');
+        if (current >= v2.maxUses) {
+          return { valid: false, error: 'This share link has reached its usage limit' };
+        }
+        localStorage.setItem(key, String(current + 1));
+      }
+
+      return {
+        valid: true,
+        databaseId: v2.resourceType === 'database' ? v2.resourceId : undefined,
+        resourceId: v2.resourceId,
+        resourceType: v2.resourceType,
+        cid: v2.cid,
+        permission: v2.permission,
+        issuerDid: v2.issuerDid
+      };
+    }
 
     // Find the config by token
     let config: ShareConfig | undefined;
@@ -1321,6 +1598,57 @@ class ShareService implements EnhancedShareServiceInterface {
     }
 
     await this.saveToStorage();
+  }
+
+  // ============================================================================
+  // Helper Methods for WorkspaceState Page Compatibility
+  // ============================================================================
+
+  /**
+   * Recursively find a page in the workspace page tree
+   */
+  private findWorkspacePage(pages: WorkspacePage[], id: string): WorkspacePage | null {
+    for (const p of pages) {
+      if (p.id === id) return p;
+      if (p.children && p.children.length > 0) {
+        const found = this.findWorkspacePage(p.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Convert a workspace page to the Page type and save to pageManager
+   */
+  private convertAndSaveWorkspacePage(wp: WorkspacePage): import('$lib/types/pages').Page {
+    const page: import('$lib/types/pages').Page = {
+      id: wp.id,
+      title: wp.title,
+      type: 'page',
+      icon: wp.icon ? { type: 'emoji', value: wp.icon } : undefined,
+      cover: wp.cover ? { type: 'image', value: wp.cover } : undefined,
+      parentId: wp.parentId ?? null,
+      workspaceId: 'default',
+      childPages: wp.children?.map(c => c.id) || [],
+      blocks: [],
+      metadata: {
+        created: new Date(wp.createdAt),
+        modified: new Date(wp.updatedAt),
+        version: 1,
+        storachaCID: '',
+        shareLinks: [],
+        isDeleted: false,
+        isTemplate: false,
+        isFavorite: false,
+        viewCount: 0
+      }
+    };
+
+    // Store in pageManager for future use
+    (pageManager as any).pages.set(page.id, page);
+
+    return page;
   }
 }
 

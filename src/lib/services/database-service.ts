@@ -43,7 +43,6 @@ import type {
   ConflictResolution
 } from '$lib/types/database';
 import { storachaClient } from './storacha';
-import { shareService } from './share-service';
 import { authService } from './auth';
 import { userDataService } from './user-data-service';
 
@@ -1241,12 +1240,10 @@ class DatabaseService implements SyncedDatabaseServiceInterface {
       manifest.lastSync = new Date().toISOString();
 
       // 3. Upload manifest
-      // Fetch share configs
-      const shareConfigs = await shareService.getShareConfigs(databaseId);
-
+      // Share configs are managed separately; keep the field for compatibility.
       const serializedDb: SerializedDatabase = {
         manifest,
-        shareConfigs
+        shareConfigs: []
       };
 
       const manifestJson = JSON.stringify(serializedDb);
@@ -1299,12 +1296,6 @@ class DatabaseService implements SyncedDatabaseServiceInterface {
    */
   async loadFromStoracha(cid: string): Promise<DatabaseManifest | null> {
     try {
-      // Check if Storacha client is ready
-      if (!storachaClient.isReady()) {
-        console.warn('Storacha client not ready');
-        return null;
-      }
-
       // 1. Fetch manifest from Storacha
       const manifestContent = await storachaClient.retrieveContent(cid);
       const manifestJson = new TextDecoder().decode(manifestContent);

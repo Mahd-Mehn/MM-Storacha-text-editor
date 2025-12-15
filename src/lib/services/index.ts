@@ -63,6 +63,9 @@ export { DatabaseService, databaseService } from './database-service';
 // Share service
 export { ShareService, shareService } from './share-service';
 
+// Permission service (granular permissions / RBAC)
+export { PermissionService, permissionService } from './permission-service';
+
 // User data service (global user database)
 export { userDataService } from './user-data-service';
 export type { 

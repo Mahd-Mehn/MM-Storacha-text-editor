@@ -11,6 +11,7 @@ import type {
   PageTreeNode
 } from '$lib/types/pages.js';
 import { blockManager } from './block-manager.js';
+import { storachaClient } from './storacha.js';
 
 /**
  * Page Manager Service Interface
@@ -56,6 +57,15 @@ export class PageManager implements PageManagerInterface {
    * Generate a unique page ID
    */
   private generatePageId(): string {
+    try {
+      const randomUUID = globalThis.crypto?.randomUUID;
+      if (typeof randomUUID === 'function') {
+        return `page_${randomUUID()}`;
+      }
+    } catch {
+      // ignore
+    }
+
     return `page_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 
@@ -367,6 +377,95 @@ export class PageManager implements PageManagerInterface {
       localStorage.setItem('storacha-pages', JSON.stringify(serialized));
     } catch (error) {
       console.warn('Failed to save pages to storage:', error);
+    }
+  }
+
+  /**
+   * Sync a page to Storacha and return its CID.
+   * Includes all blocks so recipients can load the full page.
+   */
+  async syncToStoracha(pageId: string): Promise<string | null> {
+    const page = this.pages.get(pageId);
+    if (!page) return null;
+
+    try {
+      if (!storachaClient.isReady()) {
+        console.warn('Storacha client not ready for page sync');
+        return null;
+      }
+
+      // Build serializable payload with blocks
+      const pageBlocks = blockManager.getBlocksForPage(pageId);
+      const payload = {
+        page: this.serializePage(page),
+        blocks: pageBlocks.map((b) => blockManager.serializeBlock(b))
+      };
+
+      const json = JSON.stringify(payload);
+      const content = new TextEncoder().encode(json);
+      const filename = `page_${pageId}.json`;
+
+      const cid = await storachaClient.uploadContent(content, filename);
+
+      // Persist CID on the page
+      page.metadata.storachaCID = cid;
+      this.pages.set(pageId, page);
+      this.saveToStorage();
+
+      console.log(`Page ${pageId} synced to Storacha with CID: ${cid}`);
+      return cid;
+    } catch (error) {
+      console.error('Failed to sync page to Storacha:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Load a page from Storacha by CID (for shared access).
+   * Works for both authenticated and anonymous users via public IPFS gateway.
+   */
+  async loadFromStoracha(cid: string): Promise<Page | null> {
+    try {
+      console.log(`Loading page from Storacha CID: ${cid}`);
+      
+      // Use the public gateway directly to avoid auth requirements
+      const gatewayUrl = `https://w3s.link/ipfs/${cid}`;
+      console.log(`Fetching from gateway: ${gatewayUrl}`);
+      
+      const response = await fetch(gatewayUrl);
+      
+      if (!response.ok) {
+        console.error(`Gateway fetch failed: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch from gateway: ${response.status}`);
+      }
+      
+      const json = await response.text();
+      console.log(`Received ${json.length} bytes from gateway`);
+      
+      const payload = JSON.parse(json) as { page: SerializedPage; blocks?: any[] };
+
+      const page = this.deserializePage(payload.page);
+      this.pages.set(page.id, page);
+
+      // Restore blocks
+      if (Array.isArray(payload.blocks)) {
+        await blockManager.initialize();
+        for (const serialized of payload.blocks) {
+          try {
+            const block = blockManager.deserializeBlock(serialized);
+            blockManager.restoreBlock(block);
+          } catch (blockError) {
+            console.warn(`Failed to restore block:`, blockError);
+          }
+        }
+      }
+
+      this.saveToStorage();
+      console.log(`Successfully loaded page from Storacha: ${page.id} - ${page.title}`);
+      return page;
+    } catch (error) {
+      console.error('Failed to load page from Storacha:', error);
+      return null;
     }
   }
 }

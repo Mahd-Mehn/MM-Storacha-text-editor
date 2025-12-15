@@ -106,10 +106,6 @@ export class StorachaClient {
    * Requirements: 2.1 - Content retrieval from decentralized storage
    */
   async retrieveContent(cid: string): Promise<Uint8Array> {
-    if (!this.client) {
-      throw new Error('Storacha client not initialized')
-    }
-
     try {
       // Note: w3up client doesn't have a direct retrieveFile method
       // We'll use the IPFS gateway approach for now

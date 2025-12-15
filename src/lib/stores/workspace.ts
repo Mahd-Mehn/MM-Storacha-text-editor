@@ -62,6 +62,19 @@ function loadInitialState(): WorkspaceState {
   }
 
   // Default state with sample data
+  // Use generated IDs so share links are stable and globally unique.
+  const gettingStartedId = generateWorkspacePageId();
+  const projectsId = generateWorkspacePageId();
+  const meetingNotesId = generateWorkspacePageId();
+  const personalId = generateWorkspacePageId();
+
+  const introductionId = generateWorkspacePageId();
+  const quickStartId = generateWorkspacePageId();
+  const websiteRedesignId = generateWorkspacePageId();
+  const mobileAppId = generateWorkspacePageId();
+  const journalId = generateWorkspacePageId();
+  const ideasId = generateWorkspacePageId();
+
   return {
     workspace: {
       id: 'default',
@@ -69,31 +82,31 @@ function loadInitialState(): WorkspaceState {
       icon: '📝',
       pages: [
         {
-          id: '1',
+          id: gettingStartedId,
           title: 'Getting Started',
           icon: '📚',
           type: 'folder',
           createdAt: Date.now(),
           updatedAt: Date.now(),
           children: [
-            { id: '1-1', title: 'Introduction', icon: '👋', type: 'file', children: [], parentId: '1', createdAt: Date.now(), updatedAt: Date.now() },
-            { id: '1-2', title: 'Quick Start', icon: '⚡', type: 'file', children: [], parentId: '1', createdAt: Date.now(), updatedAt: Date.now() },
+            { id: introductionId, title: 'Introduction', icon: '👋', type: 'file', children: [], parentId: gettingStartedId, createdAt: Date.now(), updatedAt: Date.now() },
+            { id: quickStartId, title: 'Quick Start', icon: '⚡', type: 'file', children: [], parentId: gettingStartedId, createdAt: Date.now(), updatedAt: Date.now() },
           ],
         },
         {
-          id: '2',
+          id: projectsId,
           title: 'Projects',
           icon: '📁',
           type: 'folder',
           createdAt: Date.now(),
           updatedAt: Date.now(),
           children: [
-            { id: '2-1', title: 'Website Redesign', icon: '🎨', type: 'file', children: [], parentId: '2', createdAt: Date.now(), updatedAt: Date.now() },
-            { id: '2-2', title: 'Mobile App', icon: '📱', type: 'file', children: [], parentId: '2', createdAt: Date.now(), updatedAt: Date.now() },
+            { id: websiteRedesignId, title: 'Website Redesign', icon: '🎨', type: 'file', children: [], parentId: projectsId, createdAt: Date.now(), updatedAt: Date.now() },
+            { id: mobileAppId, title: 'Mobile App', icon: '📱', type: 'file', children: [], parentId: projectsId, createdAt: Date.now(), updatedAt: Date.now() },
           ],
         },
         {
-          id: '3',
+          id: meetingNotesId,
           title: 'Meeting Notes',
           icon: '📝',
           type: 'file',
@@ -102,21 +115,21 @@ function loadInitialState(): WorkspaceState {
           children: [],
         },
         {
-          id: '4',
+          id: personalId,
           title: 'Personal',
           icon: '🏠',
           type: 'folder',
           createdAt: Date.now(),
           updatedAt: Date.now(),
           children: [
-            { id: '4-1', title: 'Journal', icon: '📖', type: 'file', children: [], parentId: '4', createdAt: Date.now(), updatedAt: Date.now() },
-            { id: '4-2', title: 'Ideas', icon: '💡', type: 'file', children: [], parentId: '4', createdAt: Date.now(), updatedAt: Date.now() },
+            { id: journalId, title: 'Journal', icon: '📖', type: 'file', children: [], parentId: personalId, createdAt: Date.now(), updatedAt: Date.now() },
+            { id: ideasId, title: 'Ideas', icon: '💡', type: 'file', children: [], parentId: personalId, createdAt: Date.now(), updatedAt: Date.now() },
           ],
         },
       ]
     },
     selectedPageId: null,
-    expandedIds: new Set(['1', '2', '4'])
+    expandedIds: new Set([gettingStartedId, projectsId, personalId])
   };
 }
 

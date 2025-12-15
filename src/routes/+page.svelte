@@ -130,6 +130,19 @@
   function toggleSidebar() {
     showSidebar = !showSidebar;
   }
+
+  async function shareCurrentPage() {
+    if (!currentPageId) return;
+    try {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      const url = `${baseUrl}/page/${currentPageId}`;
+      await navigator.clipboard.writeText(url);
+      notificationService.success('Link copied', 'Share link copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy share link:', error);
+      notificationService.error('Copy failed', 'Could not copy share link');
+    }
+  }
 </script>
 
 <div class="app-layout">
@@ -162,6 +175,19 @@
       </div>
       
       <div class="top-bar-right">
+        <button
+          class="icon-btn"
+          onclick={shareCurrentPage}
+          title="Share"
+          disabled={!currentPageId}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+            <path d="M16 6l-4-4-4 4" />
+            <path d="M12 2v14" />
+          </svg>
+        </button>
+
         <button 
           class="icon-btn" 
           onclick={() => goto("/settings")}

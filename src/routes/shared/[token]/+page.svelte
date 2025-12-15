@@ -2,9 +2,13 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import type { SharePermission, DatabaseManifest } from '$lib/types/database';
+  import type { Page } from '$lib/types/pages';
   import { shareService } from '$lib/services/share-service';
   import { databaseService } from '$lib/services/database-service';
+  import { pageManager } from '$lib/services/page-manager';
+  import { blockManager } from '$lib/services/block-manager';
   import { Database } from '$lib/components/database';
+  import SharedPageContent from '$lib/components/SharedPageContent.svelte';
 
   // Get token from route params
   let token = $derived($page.params.token ?? '');
@@ -15,9 +19,12 @@
   let requiresPassword = $state(false);
   let password = $state('');
   let validating = $state(false);
-  let databaseId = $state<string | null>(null);
+  let resourceType = $state<'database' | 'page' | null>(null);
+  let resourceId = $state<string | null>(null);
   let permission = $state<SharePermission | null>(null);
   let manifest = $state<DatabaseManifest | null>(null);
+  let sharedPage = $state<Page | null>(null);
+  let issuerDid = $state<string | null>(null);
 
   async function validateToken(pwd?: string) {
     validating = true;
@@ -36,15 +43,49 @@
         return;
       }
 
-      databaseId = result.databaseId!;
+      resourceType = result.resourceType ?? 'database';
+      resourceId = result.resourceId ?? result.databaseId!;
       permission = result.permission!;
+      issuerDid = result.issuerDid ?? null;
 
-      // Load the database
-      await databaseService.initialize();
-      manifest = await databaseService.getDatabase(databaseId);
+      console.log(`Validated share token: type=${resourceType}, id=${resourceId}, cid=${result.cid}`);
 
-      if (!manifest) {
-        error = 'Database not found';
+      if (resourceType === 'page') {
+        // Load page from Storacha - works without authentication via public gateway
+        console.log('Loading shared page from CID:', result.cid);
+        
+        if (result.cid) {
+          // Initialize managers (doesn't require auth for loading)
+          await pageManager.initialize();
+          await blockManager.initialize();
+          
+          const loaded = await pageManager.loadFromStoracha(result.cid);
+          if (loaded) {
+            sharedPage = loaded;
+            console.log('Successfully loaded shared page:', loaded.title);
+            console.log('Loaded blocks:', blockManager.getPageBlocks(loaded.id).length);
+          } else {
+            error = 'Failed to load shared page. The content may still be propagating across the network. Please try again in a few moments.';
+          }
+        } else {
+          error = 'No content identifier found for this share link';
+        }
+      } else {
+        // Load database
+        await databaseService.initialize();
+        if (result.cid) {
+          const loaded = await databaseService.loadFromStoracha(result.cid);
+          manifest = loaded;
+          if (loaded) {
+            resourceId = loaded.schema.id;
+          }
+        } else {
+          manifest = await databaseService.getDatabase(resourceId!);
+        }
+
+        if (!manifest) {
+          error = 'Database not found';
+        }
       }
     } catch (err) {
       console.error('Failed to validate share token:', err);
@@ -76,7 +117,7 @@
 </script>
 
 <svelte:head>
-  <title>{manifest?.schema.name || 'Shared Database'} | Storacha Notes</title>
+  <title>{sharedPage?.title || manifest?.schema.name || 'Shared Content'} | Storacha Notes</title>
 </svelte:head>
 
 <div class="shared-page">
@@ -116,7 +157,7 @@
       <p>{error}</p>
       <a href="/" class="btn-primary">Go to Home</a>
     </div>
-  {:else if databaseId && manifest}
+  {:else if resourceType === 'page' && sharedPage}
     <div class="shared-header">
       <div class="header-content">
         <span class="shared-badge">
@@ -125,11 +166,41 @@
         <span class="permission-badge">
           {getPermissionLabel(permission!)}
         </span>
+        {#if issuerDid}
+          <span class="issuer-badge" title="Shared by {issuerDid}">
+            👤 {issuerDid.slice(0, 16)}...
+          </span>
+        {/if}
+      </div>
+    </div>
+    <div class="page-wrapper">
+      <div class="page-header">
+        {#if sharedPage.icon?.value}
+          <span class="page-icon">{sharedPage.icon.value}</span>
+        {/if}
+        <h1 class="page-title">{sharedPage.title}</h1>
+      </div>
+      <SharedPageContent pageId={sharedPage.id} />
+    </div>
+  {:else if resourceType === 'database' && manifest}
+    <div class="shared-header">
+      <div class="header-content">
+        <span class="shared-badge">
+          🔗 Shared with you
+        </span>
+        <span class="permission-badge">
+          {getPermissionLabel(permission!)}
+        </span>
+        {#if issuerDid}
+          <span class="issuer-badge" title="Shared by {issuerDid}">
+            👤 {issuerDid.slice(0, 16)}...
+          </span>
+        {/if}
       </div>
     </div>
     <div class="database-wrapper">
       <Database 
-        {databaseId}
+        databaseId={resourceId!}
         readonly={permission === 'view'}
       />
     </div>
@@ -319,5 +390,44 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+  }
+
+  .page-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    width: 100%;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .page-icon {
+    font-size: 2rem;
+  }
+
+  .page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary, #111827);
+    margin: 0;
+  }
+
+  .issuer-badge {
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-secondary, #f3f4f6);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 0.25rem;
+    font-size: 0.6875rem;
+    color: var(--text-tertiary, #6b7280);
+    font-weight: 500;
+    font-family: monospace;
   }
 </style>
